@@ -6,3 +6,4 @@ runs/
 *sim_build
 *results.xml
 .venv
+.vscode/svlangserver/
