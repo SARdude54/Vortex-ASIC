@@ -15,13 +15,13 @@ TESTS = $(TEST_SUBDIRS:/=)
 LINTER := verilator
 SIMULATOR := verilator
 SIMULATOR_ARGS := --binary --timing --trace --trace-structs \
-	--assert --timescale 1ns  
+	--assert --timescale 1ns $(NOFPU_DEFS)
 SIMULATOR_BINARY := ./obj_dir/V*
 SIMULATOR_SRCS := *.sv
 # Optional use of Icarus as Linter and Simulator
 ifdef ICARUS
 SIMULATOR := iverilog
-SIMULATOR_ARGS := -g2012
+SIMULATOR_ARGS := -g2012 $(NOFPU_DEFS)
 SIMULATOR_BINARY := a.out
 SIMULATOR_SRCS := $(foreach src, $(RTL_SRCS), $(realpath $(src))) *.sv
 SIM_TOP := `$(shell pwd)/scripts/top.sh -s`
@@ -36,7 +36,10 @@ SIMULATOR_BINARY := a.out
 SIMULATOR_SRCS = $(realpath gl)/* *.sv
 endif
 
-LINT_OPTS += --lint-only --timing $(LINT_INCLUDES)
+# Disable FPU: remove F/D ISA + force FPU resources off
+NOFPU_DEFS := -DEXT_F_DISABLE -DEXT_D_DISABLE -DNUM_FPU_LANES=0 -DNUM_FPU_BLOCKS=0
+
+LINT_OPTS += --lint-only --timing $(LINT_INCLUDES) $(NOFPU_DEFS)
 
 # Text formatting for tests
 BOLD = `tput bold`
