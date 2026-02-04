@@ -867,7 +867,35 @@ package VX_gpu_pkg;
     localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, `L3_MEM_PORTS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
 
+        ///////////////////////// Memory Bus ////////////////////////
+
+    localparam DATA_SIZE  = 1;
+    localparam FLAGS_WIDTH = MEM_FLAGS_WIDTH;
+    localparam TAG_WIDTH  = 1;
+    localparam MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH;
+    localparam ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE);
+
+    typedef struct packed {
+        logic [`UP(UUID_WIDTH)-1:0]           uuid;
+        logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
+    } vx_mem_tag_t;
+
+    typedef struct packed {
+        logic                   rw;
+        logic [ADDR_WIDTH-1:0]  addr;
+        logic [DATA_SIZE*8-1:0] data;
+        logic [DATA_SIZE-1:0]   byteen;
+        logic [FLAGS_WIDTH-1:0] flags;
+        vx_mem_tag_t                   tag;
+    } vx_mem_req_data_t;
+
+    typedef struct packed {
+        logic [DATA_SIZE*8-1:0] data;
+        vx_mem_tag_t                   tag;
+    } vx_mem_rsp_data_t;
+
     ///////////////////////////////////////////////////////////////////////////
+
 
     localparam VX_MEM_PORTS =           `L3_MEM_PORTS;
     localparam VX_MEM_BYTEEN_WIDTH =    `L3_LINE_SIZE;

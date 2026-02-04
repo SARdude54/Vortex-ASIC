@@ -13,9 +13,11 @@
 
 `include "VX_define.vh"
 
+
 module VX_socket import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0,
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter int NPORTS = `L1_MEM_PORTS
 ) (
     `SCOPE_IO_DECL
 
@@ -27,11 +29,21 @@ module VX_socket import VX_gpu_pkg::*; #(
     input sysmem_perf_t     sysmem_perf,
 `endif
 
-    // DCRs
-    VX_dcr_bus_if.slave     dcr_bus_if,
+    // flattened DCR signals
+    input  logic                         dcr_write_valid,
+    input  logic [VX_DCR_ADDR_WIDTH-1:0] dcr_write_addr,
+    input  logic [VX_DCR_DATA_WIDTH-1:0] dcr_write_data,
 
-    // Memory
-    VX_mem_bus_if.master    mem_bus_if [`L1_MEM_PORTS],
+
+    // Flattened memory bus signals
+    input  logic [NPORTS-1:0]     mem_req_valid,
+    input  vx_mem_req_data_t      mem_req_data [NPORTS],
+    output logic [NPORTS-1:0]     mem_req_ready,
+
+    input  logic [NPORTS-1:0]     mem_rsp_valid,
+    input  vx_mem_rsp_data_t      mem_rsp_data [NPORTS],
+    output logic [NPORTS-1:0]     mem_rsp_ready,
+
 
 `ifdef GBAR_ENABLE
     // Barrier

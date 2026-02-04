@@ -2,8 +2,11 @@
 
 `include "VX_define.vh"
 
+
 module TB_VX_Top;
     import VX_gpu_pkg::*;
+
+    localparam int NPORTS = `L1_MEM_PORTS;
 
     logic clk;
     logic reset;
@@ -13,25 +16,25 @@ module TB_VX_Top;
     logic [VX_DCR_ADDR_WIDTH-1:0] write_addr;
     logic [VX_DCR_DATA_WIDTH-1:0] write_data;
 
-    // Output signal
+    // Flattened memory bus signals
+    logic [NPORTS-1:0]       mem_req_valid;
+    vx_mem_req_data_t        mem_req_data [NPORTS];
+    logic [NPORTS-1:0]       mem_req_ready;
+
+    logic [NPORTS-1:0]       mem_rsp_valid;
+    vx_mem_rsp_data_t        mem_rsp_data [NPORTS];
+    logic [NPORTS-1:0]       mem_rsp_ready;
+
+    // Output
     logic busy;
-
-    // Memory Bus Interface
-    VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
-        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-    ) socket_mem_bus_if[`L1_MEM_PORTS]();   
-
-    // Tie off memory signals for now
-    for (genvar i = 0; i < `L1_MEM_PORTS; ++i) begin
-        assign socket_mem_bus_if[i].req_ready = 1'b1;
-        assign socket_mem_bus_if[i].rsp_valid = 1'b0;
-        assign socket_mem_bus_if[i].rsp_data  = '0;
-    end
 
 
     // Instantiate Wrapper
-    VX_top UUT (
+    VX_top #(
+        .SOCKET_ID(0),
+        .INSTANCE_ID(""),
+        .NPORTS(NPORTS)
+    ) UUT (
         .clk(clk),
         .reset(reset),
         
@@ -39,7 +42,13 @@ module TB_VX_Top;
         .write_addr(write_addr),
         .write_data(write_data),
 
-        .mem_bus_if(socket_mem_bus_if),
+        .mem_req_valid(mem_req_valid),
+        .mem_req_data (mem_req_data),
+        .mem_req_ready(mem_req_ready),
+
+        .mem_rsp_valid(mem_rsp_valid),
+        .mem_rsp_data (mem_rsp_data),
+        .mem_rsp_ready(mem_rsp_ready),
 
         .busy(busy)
     );
