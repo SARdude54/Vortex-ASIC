@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_mem_bus_if.vh"
 
 
 module VX_top import VX_gpu_pkg::*; #(
@@ -16,17 +17,38 @@ module VX_top import VX_gpu_pkg::*; #(
 
     // memory bus signals (flattened)
     input  logic [NPORTS-1:0]      mem_req_valid,
-    input  vx_mem_req_data_t  mem_req_data [NPORTS],
+    // mem_req_data [NPORTS]. Flattened input  vx_mem_req_data_t  mem_req_data [NPORTS],
+    `VX_MEM_REQ_PORTS_IN(mem, NPORTS, ADDR_WIDTH, DATA_SIZE, FLAGS_WIDTH, UUID_WIDTH, TAG_WIDTH)
     output logic [NPORTS-1:0]      mem_req_ready,
 
     input  logic [NPORTS-1:0]      mem_rsp_valid,
-    input  vx_mem_rsp_data_t  mem_rsp_data [NPORTS],
+    // flattened: mem_rsp_data_t  mem_rsp_data [NPORTS]
+    `VX_MEM_RSP_PORTS_OUT(mem, NPORTS, DATA_SIZE, UUID_WIDTH, TAG_WIDTH)
     output logic [NPORTS-1:0]      mem_rsp_ready,
 
     // busy status
     output wire busy
 );
 
+
+    // typedef struct packed {
+    //     logic [`UP(UUID_WIDTH)-1:0]           uuid;
+    //     logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
+    // } vx_mem_tag_t;
+
+    // typedef struct packed {
+    //     logic                   rw;
+    //     logic [ADDR_WIDTH-1:0]  addr;
+    //     logic [DATA_SIZE*8-1:0] data;
+    //     logic [DATA_SIZE-1:0]   byteen;
+    //     logic [FLAGS_WIDTH-1:0] flags;
+    //     vx_mem_tag_t                   tag;
+    // } vx_mem_req_data_t;
+
+    // typedef struct packed {
+    //     logic [DATA_SIZE*8-1:0] data;
+    //     vx_mem_tag_t                   tag;
+    // } vx_mem_rsp_data_t;
 
 
     // Instantiate a Single a Socket
@@ -55,3 +77,5 @@ module VX_top import VX_gpu_pkg::*; #(
 
     
 endmodule
+
+

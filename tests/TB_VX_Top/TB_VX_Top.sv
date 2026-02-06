@@ -18,12 +18,21 @@ module TB_VX_Top;
 
     // Flattened memory bus signals
     logic [NPORTS-1:0]       mem_req_valid;
-    vx_mem_req_data_t        mem_req_data [NPORTS];
     logic [NPORTS-1:0]       mem_req_ready;
+    logic mem_req_rw [NPORTS-1:0];      
+    logic mem_req_addr [NPORTS-1:0];   
+    logic mem_req_data [NPORTS-1:0];   
+    logic mem_req_byteen [NPORTS-1:0]; 
+    logic mem_req_flags [NPORTS-1:0];  
+    logic mem_req_tag_uuid [NPORTS-1:0];  
+    logic mem_req_tag_value [NPORTS-1:0];
 
     logic [NPORTS-1:0]       mem_rsp_valid;
-    vx_mem_rsp_data_t        mem_rsp_data [NPORTS];
     logic [NPORTS-1:0]       mem_rsp_ready;
+
+    logic mem_rsp_data [NPORTS-1:0];
+    logic mem_rsp_tag_uuid [NPORTS-1:0];
+    logic mem_rsp_tag_value [NPORTS-1:0];
 
     // Output
     logic busy;
@@ -42,13 +51,22 @@ module TB_VX_Top;
         .write_addr(write_addr),
         .write_data(write_data),
 
-        .mem_req_valid(mem_req_valid),
-        .mem_req_data (mem_req_data),
         .mem_req_ready(mem_req_ready),
+        .mem_req_valid(mem_req_valid),
+        .mem_req_rw(mem_req_rw),     
+        .mem_req_addr(mem_req_addr),   
+        .mem_req_data(mem_req_data),   
+        .mem_req_byteen(mem_req_byteen), 
+        .mem_req_flags(mem_req_flags),  
+        .mem_req_tag_uuid(mem_req_tag_uuid),  
+        .mem_req_tag_value(mem_req_tag_value),
 
         .mem_rsp_valid(mem_rsp_valid),
-        .mem_rsp_data (mem_rsp_data),
         .mem_rsp_ready(mem_rsp_ready),
+        .mem_rsp_data(mem_rsp_data),
+        .mem_rsp_tag_uuid(mem_rsp_tag_uuid),
+        .mem_rsp_tag_value(mem_rsp_tag_value),
+        .mem_rsp_valid(mem_rsp_valid),
 
         .busy(busy)
     );
