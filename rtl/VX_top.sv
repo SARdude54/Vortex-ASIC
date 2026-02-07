@@ -16,15 +16,12 @@ module VX_top import VX_gpu_pkg::*; #(
     input wire [VX_DCR_DATA_WIDTH-1:0] write_data,
 
     // memory bus signals (flattened)
-    input  logic [NPORTS-1:0]      mem_req_valid,
     // mem_req_data [NPORTS]. Flattened input  vx_mem_req_data_t  mem_req_data [NPORTS],
     `VX_MEM_REQ_PORTS_IN(mem, NPORTS, ADDR_WIDTH, DATA_SIZE, FLAGS_WIDTH, UUID_WIDTH, TAG_WIDTH)
-    output logic [NPORTS-1:0]      mem_req_ready,
-
-    input  logic [NPORTS-1:0]      mem_rsp_valid,
+    
     // flattened: mem_rsp_data_t  mem_rsp_data [NPORTS]
     `VX_MEM_RSP_PORTS_OUT(mem, NPORTS, DATA_SIZE, UUID_WIDTH, TAG_WIDTH)
-    output logic [NPORTS-1:0]      mem_rsp_ready,
+    
 
     // busy status
     output wire busy
