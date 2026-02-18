@@ -12,13 +12,15 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_dcr_bus_if.vh"
 
 module VX_dcr_data import VX_gpu_pkg::*; (
     input wire              clk,
     input wire              reset,
 
     // Inputs
-    VX_dcr_bus_if.slave     dcr_bus_if,
+    // flatten: VX_dcr_bus_if.slave     dcr_bus_if,
+    `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
     // Outputs
     output base_dcrs_t      base_dcrs
@@ -29,17 +31,17 @@ module VX_dcr_data import VX_gpu_pkg::*; (
     base_dcrs_t dcrs;
 
     always @(posedge clk) begin
-       if (dcr_bus_if.write_valid) begin
-            case (dcr_bus_if.write_addr)
-            `VX_DCR_BASE_STARTUP_ADDR0 : dcrs.startup_addr[31:0] <= dcr_bus_if.write_data;
+       if (dcr_bus_if_write_valid) begin
+            case (dcr_bus_if_write_addr)
+            `VX_DCR_BASE_STARTUP_ADDR0 : dcrs.startup_addr[31:0] <= dcr_bus_if_write_data;
         `ifdef XLEN_64
-            `VX_DCR_BASE_STARTUP_ADDR1 : dcrs.startup_addr[63:32] <= dcr_bus_if.write_data;
+            `VX_DCR_BASE_STARTUP_ADDR1 : dcrs.startup_addr[63:32] <= dcr_bus_if_write_data;
         `endif
-            `VX_DCR_BASE_STARTUP_ARG0 : dcrs.startup_arg[31:0] <= dcr_bus_if.write_data;
+            `VX_DCR_BASE_STARTUP_ARG0 : dcrs.startup_arg[31:0] <= dcr_bus_if_write_data;
         `ifdef XLEN_64
-            `VX_DCR_BASE_STARTUP_ARG1 : dcrs.startup_arg[63:32] <= dcr_bus_if.write_data;
+            `VX_DCR_BASE_STARTUP_ARG1 : dcrs.startup_arg[63:32] <= dcr_bus_if_write_data;
         `endif
-            `VX_DCR_BASE_MPM_CLASS : dcrs.mpm_class <= dcr_bus_if.write_data[7:0];
+            `VX_DCR_BASE_MPM_CLASS : dcrs.mpm_class <= dcr_bus_if_write_data[7:0];
             default:;
             endcase
         end
@@ -49,10 +51,10 @@ module VX_dcr_data import VX_gpu_pkg::*; (
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
-        if (dcr_bus_if.write_valid) begin
+        if (dcr_bus_if_write_valid) begin
             `TRACE(2, ("%t: base-dcr: state=", $time))
-            VX_trace_pkg::trace_base_dcr(1, dcr_bus_if.write_addr);
-            `TRACE(2, (", data=0x%h\n", dcr_bus_if.write_data))
+            VX_trace_pkg::trace_base_dcr(1, dcr_bus_if_write_addr);
+            `TRACE(2, (", data=0x%h\n", dcr_bus_if_write_data))
         end
     end
 `endif

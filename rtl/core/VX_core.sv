@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_dcr_bus_if.vh"
 
 `ifdef EXT_F_ENABLE
 `include "VX_fpu_define.vh"
@@ -31,7 +32,8 @@ module VX_core import VX_gpu_pkg::*; #(
     input sysmem_perf_t     sysmem_perf,
 `endif
 
-    VX_dcr_bus_if.slave     dcr_bus_if,
+    // flattened: VX_dcr_bus_if.slave     dcr_bus_if,
+    `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
@@ -79,10 +81,12 @@ module VX_core import VX_gpu_pkg::*; #(
 
     base_dcrs_t base_dcrs;
 
+    // TODO: Flatten this
     VX_dcr_data dcr_data (
         .clk        (clk),
         .reset      (reset),
-        .dcr_bus_if (dcr_bus_if),
+        // flatten: .dcr_bus_if (dcr_bus_if),
+        `VX_DCR_BUS_PASS_PORTS(dcr_bus_if, dcr_bus_if),
         .base_dcrs  (base_dcrs)
     );
 

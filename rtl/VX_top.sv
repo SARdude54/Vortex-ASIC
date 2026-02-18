@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_dcr_bus_if.vh"
 
 module VX_top import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0,
@@ -7,10 +8,8 @@ module VX_top import VX_gpu_pkg::*; #(
     input wire                         clk,
     input wire                         reset,
 
-    // (Flattened) DCR interface Inputs
-    input wire                         write_valid,
-    input wire [VX_DCR_ADDR_WIDTH-1:0] write_addr,
-    input wire [VX_DCR_DATA_WIDTH-1:0] write_data,
+    // flattened: VX_dcr_bus_if.slave         dcr_bus_if,
+    `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
     // Pass in VX_mem_bus_if instead of instantiating here (easier for simulation)
     VX_mem_bus_if.master mem_bus_if[`L1_MEM_PORTS],
@@ -19,10 +18,13 @@ module VX_top import VX_gpu_pkg::*; #(
 );
 
     // Instatiate Interfaces
-    VX_dcr_bus_if socket_dcr_bus_if();
-    assign socket_dcr_bus_if.write_valid = write_valid;
-    assign socket_dcr_bus_if.write_addr = write_addr;
-    assign socket_dcr_bus_if.write_data = write_data;
+    // flattened: VX_dcr_bus_if socket_dcr_bus_if();
+    `VX_DCR_BUS_SIGNALS(socket_dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH)
+
+
+    assign socket_dcr_bus_if_write_valid = dcr_bus_if_write_valid;
+    assign socket_dcr_bus_if_write_addr = dcr_bus_if_write_addr;
+    assign socket_dcr_bus_if_write_data = dcr_bus_if_write_data;
 
 
     // Instantiate a Single a Socket
@@ -32,7 +34,8 @@ module VX_top import VX_gpu_pkg::*; #(
     ) socket (
         .clk(clk),
         .reset(reset),
-        .dcr_bus_if(socket_dcr_bus_if),
+        // flatten: .dcr_bus_if(socket_dcr_bus_if),
+        `VX_DCR_BUS_PASS_PORTS(dcr_bus_if, socket_dcr_bus_if),
         .mem_bus_if(mem_bus_if),
         .busy(busy)
     );
