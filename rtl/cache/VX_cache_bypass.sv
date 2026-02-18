@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_cache_define.vh"
+`include "mem/VX_mem_bus_if.vh"
 
 module VX_cache_bypass import VX_gpu_pkg::*; #(
     parameter NUM_REQS          = 1,
@@ -37,16 +38,21 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     input wire reset,
 
     // Core request in
-    VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
+    // flatten: VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
+    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(core_bus_in, NUM_REGS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
 
     // Core request out
-    VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
+    // flatten: VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(core_bus_out, NUM_REGS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
 
     // Memory request in
-    VX_mem_bus_if.slave     mem_bus_in_if [MEM_PORTS],
+    // flatten: VX_mem_bus_if.slave     mem_bus_in_if [MEM_PORTS],
+    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(mem_bus_in, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
 
     // Memory request out
-    VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
+    // flatten: VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(mem_bus_out, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+
 );
     localparam DIRECT_PASSTHRU   = !CACHE_ENABLE && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == MEM_PORTS);
     localparam CORE_DATA_WIDTH   = WORD_SIZE * 8;
@@ -62,11 +68,13 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
 
     // hanlde non-cacheable core request switch ///////////////////////////////
+    // flatten core_bus_nc_switch_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (CORE_TAG_WIDTH)
+    // ) core_bus_nc_switch_if[(CACHE_ENABLE ? 2 : 1) * NUM_REQS]();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (CORE_TAG_WIDTH)
-    ) core_bus_nc_switch_if[(CACHE_ENABLE ? 2 : 1) * NUM_REQS]();
+    `VX_MEM_BUS_SIGNALS(core_bus_nc_switch, (CACHE_ENABLE ? 2 : 1) * NUM_REQS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, CORE_TAG_WIDTH)
 
     wire [NUM_REQS-1:0] core_req_nc_sel;
 
@@ -78,6 +86,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         end
     end
 
+    // TODO: Flatten this module
     VX_mem_switch #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS ((CACHE_ENABLE ? 2 : 1) * NUM_REQS),
@@ -90,14 +99,19 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .bus_sel   (core_req_nc_sel),
-        .bus_in_if (core_bus_in_if),
-        .bus_out_if(core_bus_nc_switch_if)
+        // flatten: .bus_in_if (core_bus_in_if),
+        `VX_MEM_BUS_PASS_SIGNALS(core_bus_in, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+        // flatten: .bus_out_if(core_bus_nc_switch_if)
+        `VX_MEM_BUS_PASS_SIGNALS(core_bus_nc_switch, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
     );
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (CORE_TAG_WIDTH)
-    ) core_bus_in_nc_if[NUM_REQS]();
+    // flatten: core_bus_in_nc_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (CORE_TAG_WIDTH)
+    // ) core_bus_in_nc_if[NUM_REQS]();
+
+    `VX_MEM_BUS_SIGNALS(core_bus_in_nc, NUM_REQS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, CORE_TAG_WIDTH)
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_nc_switch_if
 
@@ -124,10 +138,13 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
 
     // handle memory requests /////////////////////////////////////////////////
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (MEM_TAG_NC1_WIDTH)
-    ) core_bus_nc_arb_if[MEM_PORTS]();
+    // core_bus_nc_arb_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (MEM_TAG_NC1_WIDTH)
+    // ) core_bus_nc_arb_if[MEM_PORTS]();
+
+    `VX_MEM_BUS_SIGNALS(core_bus_nc_arb, MEM_PORTS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, MEM_TAG_NC1_WIDTH)
 
     VX_mem_arb #(
         .NUM_INPUTS (NUM_REQS),
@@ -141,14 +158,21 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     ) core_bus_nc_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (core_bus_in_nc_if),
-        .bus_out_if (core_bus_nc_arb_if)
+
+        // flatten: .bus_in_if  (core_bus_in_nc_if),
+        `VX_MEM_BUS_PASS_SIGNALS(core_bus_in_nc, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+
+        // flatten: .bus_out_if (core_bus_nc_arb_if)
+        `VX_MEM_BUS_PASS_SIGNALS(core_bus_nc_arb, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
     );
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_NC2_WIDTH)
-    ) mem_bus_out_nc_if[MEM_PORTS]();
+    // mem_bus_out_nc_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LINE_SIZE),
+    //     .TAG_WIDTH (MEM_TAG_NC2_WIDTH)
+    // ) mem_bus_out_nc_if[MEM_PORTS]();
+
+    `VX_MEM_BUS_SIGNALS(mem_bus_out_nc, MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_NC2_WIDTH)
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc
         wire                        core_req_nc_arb_rw;
@@ -232,10 +256,13 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         assign mem_bus_out_nc_if[i].rsp_ready = core_bus_nc_arb_if[i].rsp_ready;
     end
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_OUT_WIDTH)
-    ) mem_bus_out_src_if[(CACHE_ENABLE ? 2 : 1) * MEM_PORTS]();
+    // mem_bus_out_src_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LINE_SIZE),
+    //     .TAG_WIDTH (MEM_TAG_OUT_WIDTH)
+    // ) mem_bus_out_src_if[(CACHE_ENABLE ? 2 : 1) * MEM_PORTS]();
+
+    `VX_MEM_BUS_SIGNALS(mem_bus_out_src, (CACHE_ENABLE ? 2 : 1) * MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_OUT_WIDTH)
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_src
         `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[0 * MEM_PORTS + i], mem_bus_out_nc_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_NC2_WIDTH, UUID_WIDTH);
@@ -246,6 +273,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         end
     end
 
+    
     VX_mem_arb #(
         .NUM_INPUTS ((CACHE_ENABLE ? 2 : 1) * MEM_PORTS),
         .NUM_OUTPUTS(MEM_PORTS),
@@ -257,8 +285,12 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     ) mem_bus_out_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (mem_bus_out_src_if),
-        .bus_out_if (mem_bus_out_if)
+
+        // flatten: .bus_in_if  (mem_bus_out_src_if),
+        `VX_MEM_BUS_PASS_SIGNALS(mem_bus_out_src, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+
+        // flatten: .bus_out_if (mem_bus_out_if)
+        `VX_MEM_BUS_PASS_SIGNALS(mem_bus_out, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
     );
 
 endmodule

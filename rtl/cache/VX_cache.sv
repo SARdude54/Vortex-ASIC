@@ -71,8 +71,11 @@ module VX_cache import VX_gpu_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    // flatten: VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
+    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(core_bus, NUM_REGS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+
+    // flatten: VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(mem_bus, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter: number of banks must be power of 2"))
@@ -110,10 +113,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
 `endif
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (TAG_WIDTH)
-    ) core_bus2_if[NUM_REQS]();
+    // flattened: core_bus2_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (TAG_WIDTH)
+    // ) core_bus2_if[NUM_REQS]();
+
+    `VX_MEM_BUS_SIGNALS(core_bus2, NUM_REGS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, TAG_WIDTH)
 
     wire [NUM_BANKS-1:0] per_bank_flush_begin;
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
@@ -121,6 +127,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
 
+    // TODO: Flatten this
     VX_cache_init #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
@@ -139,10 +146,13 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     // Memory response gather /////////////////////////////////////////////////
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) mem_bus_tmp_if[MEM_PORTS]();
+    // mem_bus_tmp_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LINE_SIZE),
+    //     .TAG_WIDTH (MEM_TAG_WIDTH)
+    // ) mem_bus_tmp_if[MEM_PORTS]();
+
+    `VX_MEM_BUS_SIGNALS(mem_bus_tmp, MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_WIDTH)
 
     wire [MEM_PORTS-1:0]                    mem_rsp_queue_valid;
     wire [MEM_PORTS-1:0][MEM_RSP_DATAW-1:0] mem_rsp_queue_data;

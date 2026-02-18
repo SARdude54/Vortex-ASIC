@@ -80,8 +80,12 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     output cache_perf_t     cache_perf,
 `endif
 
-    VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    // flatten: VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(core_bus, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+
+
+    // flatten: VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(mem, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
@@ -92,23 +96,32 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
     localparam BYPASS_ENABLE = (NC_ENABLE || PASSTHRU);
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (TAG_WIDTH)
-    ) core_bus_cache_if[NUM_REQS]();
+    // flatten core_bus_cache_if[NUM_REQS]
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (TAG_WIDTH)
+    // ) core_bus_cache_if[NUM_REQS]();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
-    ) mem_bus_cache_if[MEM_PORTS]();
+    `VX_MEM_BUS_SIGNALS(core_cache, NUM_REGS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, TAG_WIDTH)
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) mem_bus_tmp_if[MEM_PORTS]();
+    // mem_bus_cache
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LINE_SIZE),
+    //     .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
+    // ) mem_bus_cache_if[MEM_PORTS]();
+    `VX_MEM_BUS_SIGNALS(mem_cache, MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, CACHE_MEM_TAG_WIDTH)
+
+    // flatten mem_bus_tmp_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LINE_SIZE),
+    //     .TAG_WIDTH (MEM_TAG_WIDTH)
+    // ) mem_bus_tmp_if[MEM_PORTS]();
+    `VX_MEM_BUS_SIGNALS(mem_tmp, MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_WIDTH)
+
 
     if (BYPASS_ENABLE) begin : g_bypass
 
+        
         VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
             .MEM_PORTS         (MEM_PORTS),
@@ -131,11 +144,15 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .clk            (clk),
             .reset          (reset),
 
-            .core_bus_in_if (core_bus_if),
-            .core_bus_out_if(core_bus_cache_if),
+            // flatten: .core_bus_in_if (core_bus_if),
+            `VX_MEM_BUS_PASS_SIGNALS(core_bus, 1, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+            // flatten: .core_bus_out_if(core_bus_cache_if),
+            `VX_MEM_BUS_PASS_SIGNALS(core_cache, 1, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
 
-            .mem_bus_in_if  (mem_bus_cache_if),
-            .mem_bus_out_if (mem_bus_tmp_if)
+            // flatten: .mem_bus_in_if  (mem_bus_cache_if),
+            `VX_MEM_BUS_PASS_SIGNALS(mem_cache, 1, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+            // flatten: .mem_bus_out_if (mem_bus_tmp_if)
+            `VX_MEM_BUS_PASS_SIGNALS(mem_temp, 1, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
         );
 
     end else begin : g_no_bypass
@@ -159,6 +176,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     if (PASSTHRU == 0) begin : g_cache
 
+        // TODO: Flatten Cache
         VX_cache #(
             .INSTANCE_ID  (INSTANCE_ID),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -185,8 +203,13 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .cache_perf     (cache_perf),
         `endif
-            .core_bus_if    (core_bus_cache_if),
-            .mem_bus_if     (mem_bus_cache_if)
+
+            // Flatten: .core_bus_if    (core_bus_cache_if),
+
+            `VX_MEM_BUS_PASS_SIGNALS(core_cache, NUM_REGS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, TAG_WIDTH)
+
+            // .mem_bus_if     (mem_bus_cache_if)
+            `VX_MEM_BUS_PASS_SIGNALS(mem_cache, MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, CACHE_MEM_TAG_WIDTH)
         );
 
     end else begin : g_passthru

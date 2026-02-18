@@ -10,43 +10,19 @@ module VX_top import VX_gpu_pkg::*; #(
     input wire                         clk,
     input wire                         reset,
 
-    // (Flattened) DCR interface Inputs
+    // (Flattened) DCR interface Inputs TODO: set up struct for DCR next
     input wire                         write_valid,
     input wire [VX_DCR_ADDR_WIDTH-1:0] write_addr,
     input wire [VX_DCR_DATA_WIDTH-1:0] write_data,
 
     // memory bus signals (flattened)
     // mem_req_data [NPORTS]. Flattened input  vx_mem_req_data_t  mem_req_data [NPORTS],
-    `VX_MEM_REQ_PORTS_IN(mem, NPORTS, ADDR_WIDTH, DATA_SIZE, FLAGS_WIDTH, UUID_WIDTH, TAG_WIDTH)
-    
-    // flattened: mem_rsp_data_t  mem_rsp_data [NPORTS]
-    `VX_MEM_RSP_PORTS_OUT(mem, NPORTS, DATA_SIZE, UUID_WIDTH, TAG_WIDTH)
+    `VX_MEM_BUS_PORTS_IN(mem, NPORTS, ADDR_WIDTH, DATA_SIZE, FLAGS_WIDTH, UUID_WIDTH, TAG_WIDTH),
     
 
     // busy status
     output wire busy
 );
-
-
-    // typedef struct packed {
-    //     logic [`UP(UUID_WIDTH)-1:0]           uuid;
-    //     logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
-    // } vx_mem_tag_t;
-
-    // typedef struct packed {
-    //     logic                   rw;
-    //     logic [ADDR_WIDTH-1:0]  addr;
-    //     logic [DATA_SIZE*8-1:0] data;
-    //     logic [DATA_SIZE-1:0]   byteen;
-    //     logic [FLAGS_WIDTH-1:0] flags;
-    //     vx_mem_tag_t                   tag;
-    // } vx_mem_req_data_t;
-
-    // typedef struct packed {
-    //     logic [DATA_SIZE*8-1:0] data;
-    //     vx_mem_tag_t                   tag;
-    // } vx_mem_rsp_data_t;
-
 
     // Instantiate a Single a Socket
     VX_socket #(

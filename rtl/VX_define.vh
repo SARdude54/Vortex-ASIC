@@ -284,13 +284,26 @@
     assign dst.data  = src.data; \
     assign src.ready = dst.ready
 
-`define ASSIGN_VX_MEM_BUS_IF(dst, src) \
-    assign dst.req_valid  = src.req_valid; \
-    assign dst.req_data   = src.req_data; \
-    assign src.req_ready  = dst.req_ready; \
-    assign src.rsp_valid  = dst.rsp_valid; \
-    assign src.rsp_data   = dst.rsp_data; \
-    assign dst.rsp_ready  = src.rsp_ready
+
+
+`define ASSIGN_VX_MEM_BUS_IF(dst_prefix, src_prefix, N) \
+    assign dst_prefix``_req_valid  = src_prefix``_req_valid[N]; \
+    assign dst_prefix``_req_rw   = src_prefix``_req_rw[N]; \
+    assign dst_prefix``_req_addr   = src_prefix``_req_addr[N]; \
+    assign dst_prefix``_req_data   = src_prefix``_req_data[N]; \
+    assign dst_prefix``_req_byteen   = src_prefix``_req_byteen[N]; \
+    assign dst_prefix``_req_flags   = src_prefix``_req_flags[N]; \
+    assign dst_prefix``_req_tag_uuid = src_prefix``_req_tag_uuid[N]; \
+    assign dst_prefix``_req_value   = src_prefix``_req_value[N]; \
+    assign src_prefix``_req_ready[N]  = dst_prefix``_req_ready; \
+    assign src_prefix``_rsp_valid[N]  = dst_prefix``_rsp_valid; \
+    assign src_prefix``_rsp_data[N]   = dst_prefix``_rsp_data; \
+    assign src_prefix``_rsp_uuid[N]   = dst_prefix``_rsp_uuid; \
+    assign src_prefix``_rsp_value[N]   = dst_prefix``_rsp_value; \
+    assign dst_prefix``_rsp_ready  = src_prefix``_rsp_ready[N];
+
+
+
 
 `define ASSIGN_VX_MEM_BUS_RO_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
@@ -306,53 +319,44 @@
     assign src.rsp_data.tag = dst.rsp_data.tag; \
     assign dst.rsp_ready = src.rsp_ready
 
-`define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \
-    /* verilator lint_off GENUNNAMED */ \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data.rw = src.req_data.rw; \
-    assign dst.req_data.addr = src.req_data.addr; \
-    assign dst.req_data.data = src.req_data.data; \
-    assign dst.req_data.byteen = src.req_data.byteen; \
-    assign dst.req_data.flags = src.req_data.flags; \
-    if (TD != TS) begin \
-        if (UUID != 0) begin \
-            if (TD > TS) begin \
-                assign dst.req_data.tag = {src.req_data.tag.uuid, {(TD-TS){1'b0}}, src.req_data.tag.value}; \
-            end else begin \
-                assign dst.req_data.tag = {src.req_data.tag.uuid, src.req_data.tag.value[TD-UUID-1:0]}; \
-            end \
-        end else begin \
-            if (TD > TS) begin \
-                assign dst.req_data.tag = {{(TD-TS){1'b0}}, src.req_data.tag}; \
-            end else begin \
-                assign dst.req_data.tag = src.req_data.tag[TD-1:0]; \
-            end \
-        end \
+`define ASSIGN_VX_MEM_BUS_FLAT_EX(dst, src, ADDR_D, ADDR_S, TAG_D, TAG_S, UUID_W) \
+  /* req */\
+  assign dst``_req_valid = src``_req_valid; \
+  assign src``_req_ready = dst``_req_ready; \
+  /* set dst by port */ \
+  for (genvar i = 0; i < (N); ++i) begin : gen_req_``dst``_``src \
+    assign dst``_req_rw[i]      = src``_req_rw[i]; \
+    /* convert addr width (either pad or truncate) */ \
+    if (ADDR_D >= ADDR_S) begin \
+      assign dst``_req_addr[i]  = {{(ADDR_D-ADDR_S){1'b0}}, src``_req_addr[i]}; \
     end else begin \
-        assign dst.req_data.tag = src.req_data.tag; \
+      assign dst``_req_addr[i]  = src``_req_addr[i][ADDR_D-1:0]; \
     end \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data.data = dst.rsp_data.data; \
-    if (TD != TS) begin \
-        if (UUID != 0) begin \
-            if (TD > TS) begin \
-                assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, dst.rsp_data.tag.value[TS-UUID-1:0]}; \
-            end else begin \
-                assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, {(TS-TD){1'b0}}, dst.rsp_data.tag.value}; \
-            end \
-        end else begin \
-            if (TD > TS) begin \
-                assign src.rsp_data.tag = dst.rsp_data.tag[TS-1:0]; \
-            end else begin \
-                assign src.rsp_data.tag = {{(TS-TD){1'b0}}, dst.rsp_data.tag}; \
-            end \
-        end \
+    assign dst``_req_data[i]    = src``_req_data[i]; \
+    assign dst``_req_byteen[i]  = src``_req_byteen[i]; \
+    assign dst``_req_flags[i]   = src``_req_flags[i]; \
+    /* tag uuid always same width */ \
+    assign dst``_req_tag_uuid[i] = src``_req_tag_uuid[i]; \
+    /* tag value width convert */ \
+    if (TAG_D >= TAG_S) begin \
+      assign dst``_req_tag_value[i] = {{(TAG_D-TAG_S){1'b0}}, src``_req_tag_value[i]}; \
     end else begin \
-        assign src.rsp_data.tag = dst.rsp_data.tag; \
+      assign dst``_req_tag_value[i] = src``_req_tag_value[i][TAG_D-1:0]; \
     end \
-    assign dst.rsp_ready = src.rsp_ready \
-    /* verilator lint_off GENUNNAMED */
+  end \
+  /* rsp */ \
+  assign src``_rsp_valid = dst``_rsp_valid; \
+  assign dst``_rsp_ready = src``_rsp_ready; \
+  for (genvar j = 0; j < $bits(dst``_rsp_data); ++j) begin : gen_rsp_``dst``_``src \
+    assign src``_rsp_data[j]     = dst``_rsp_data[j]; \
+    assign src``_rsp_tag_uuid[j] = dst``_rsp_tag_uuid[j]; \
+    if (TAG_S >= TAG_D) begin \
+      assign src``_rsp_tag_value[j] = dst``_rsp_tag_value[j][TAG_S-1:0]; \
+    end else begin \
+      assign src``_rsp_tag_value[j] = {{(TAG_S-TAG_D){1'b0}}, dst``_rsp_tag_value[j]}; \
+    end \
+  end
+
 
 `define INIT_VX_MEM_BUS_IF(itf) \
     assign itf.req_valid = 0; \

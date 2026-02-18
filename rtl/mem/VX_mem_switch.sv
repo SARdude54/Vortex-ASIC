@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "mem/VX_mem_bus_if.vh"
 
 module VX_mem_switch import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
@@ -31,8 +32,12 @@ module VX_mem_switch import VX_gpu_pkg::*; #(
     input wire              reset,
 
     input wire  [SEL_COUNT-1:0][`UP(LOG_NUM_REQS)-1:0] bus_sel,
-    VX_mem_bus_if.slave     bus_in_if [NUM_INPUTS],
-    VX_mem_bus_if.master    bus_out_if [NUM_OUTPUTS]
+
+    // flatten: VX_mem_bus_if.slave     bus_in_if [NUM_INPUTS],
+    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(bus_in, NUM_INPUTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+
+    // flatten: VX_mem_bus_if.master    bus_out_if [NUM_OUTPUTS]
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(bus_out, NUM_OUPUTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
 );
     localparam DATA_WIDTH = (8 * DATA_SIZE);
     localparam REQ_DATAW  = TAG_WIDTH + ADDR_WIDTH + MEM_FLAGS_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;

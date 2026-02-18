@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_cache_define.vh"
+`include "mem/VX_mem_bus_if.vh"
 
 module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
@@ -78,8 +79,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     output cache_perf_t     cache_perf,
 `endif
 
-    VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    // replaces: VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
+    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(core, `SOCKET_SIZE, ADDR_W, ICACHE_WORD_SIZE, FLAGS_W, UUID_W, ICACHE_TAG_WIDTH),
+    
+    // replaces: VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(mem, `SOCKET_SIZE, ADDR_W, ICACHE_WORD_SIZE, FLAGS_W, UUID_W, ICACHE_TAG_WIDTH)
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
@@ -97,29 +101,44 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     `PERF_CACHE_ADD (cache_perf, perf_cache_unit, NUM_CACHES)
 `endif
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) cache_mem_bus_if[NUM_CACHES * MEM_PORTS]();
+    // TODO flatten cache_mem_bus_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LINE_SIZE),
+    //     .TAG_WIDTH (MEM_TAG_WIDTH)
+    // ) cache_mem_bus_if[NUM_CACHES * MEM_PORTS]();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (ARB_TAG_WIDTH)
-    ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
+    `VX_MEM_BUS_SIGNALS(cache_mem, NUM_CACHES * MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_WIDTH)
+
+    
+
+    // TODO flatten arb_core_bus_if
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (ARB_TAG_WIDTH)
+    // ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
+
+    `VX_MEM_BUS_SIGNALS(arb_core, NUM_CACHES * NUM_REQS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, ARB_TAG_WIDTH)
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_arb
-        VX_mem_bus_if #(
-            .DATA_SIZE (WORD_SIZE),
-            .TAG_WIDTH (TAG_WIDTH)
-        ) core_bus_tmp_if[NUM_INPUTS]();
 
+        // TODO flatten core_bus_tmp_if
+        // VX_mem_bus_if #(
+        //     .DATA_SIZE (WORD_SIZE),
+        //     .TAG_WIDTH (TAG_WIDTH)
+        // ) core_bus_tmp_if[NUM_INPUTS]();
+
+        `VX_MEM_BUS_SIGNALS(core_bus_temp, NUM_INPUTS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, TAG_WIDTH)
+
+        // TODO flatten arb_core_bus_tmp_if
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
             .TAG_WIDTH (ARB_TAG_WIDTH)
         ) arb_core_bus_tmp_if[NUM_CACHES]();
 
+        `VX_MEM_BUS_SIGNALS(arb_core_bus_temp, NUM_CACHES, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, ARB_TAG_WIDTH)
+
         for (genvar j = 0; j < NUM_INPUTS; ++j) begin : g_core_bus_tmp_if
-            `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i]);
+            `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i])
         end
 
         VX_mem_arb #(
@@ -144,6 +163,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     end
 
      for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_wrap
+        // TODO flatten this module
         VX_cache_wrap #(
             .INSTANCE_ID  (`SFORMATF(("%s%0d", INSTANCE_ID, i))),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -174,25 +194,35 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .clk         (clk),
             .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
-            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
+            // flatten .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
+            `VX_MEM_BUS_PASS_SIGNALS(cache_mem, i * NUM_REQS +: NUM_REQS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
         );
     end
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
-        VX_mem_bus_if #(
-            .DATA_SIZE (LINE_SIZE),
-            .TAG_WIDTH (MEM_TAG_WIDTH)
-        ) arb_core_bus_tmp_if[NUM_CACHES]();
 
-        VX_mem_bus_if #(
-            .DATA_SIZE (LINE_SIZE),
-            .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
-        ) mem_bus_tmp_if[1]();
+        // Flatten: arb_core_bus_tmp_if
+        // VX_mem_bus_if #(
+        //     .DATA_SIZE (LINE_SIZE),
+        //     .TAG_WIDTH (MEM_TAG_WIDTH)
+        // ) arb_core_bus_tmp_if[NUM_CACHES]();
+
+        `VX_MEM_BUS_SIGNALS(arb_core_bus_temp, NUM_CACHES, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_WIDTH)
+
+        // Flatten: flatten mem_bus_tmp_if
+        // VX_mem_bus_if #(
+        //     .DATA_SIZE (LINE_SIZE),
+        //     .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
+        // ) mem_bus_tmp_if[1]();
+
+        `VX_MEM_BUS_SIGNALS(mem_temp, 1, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
+
 
         for (genvar j = 0; j < NUM_CACHES; ++j) begin : g_arb_core_bus_tmp_if
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_tmp_if[j], cache_mem_bus_if[j * MEM_PORTS + i]);
         end
 
+        // TODO flatten module
         VX_mem_arb #(
             .NUM_INPUTS  (NUM_CACHES),
             .NUM_OUTPUTS (1),
