@@ -374,7 +374,8 @@
     assign itf.rsp_data  = '0; \
     `UNUSED_VAR (itf.rsp_ready)
 
-`define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
+// modified - replace interfaces with prefixes
+`define BUFFER_DCR_BUS_IF(dst_prefix, src_prefix, ena, latency) \
     /* verilator lint_off GENUNNAMED */ \
     if (latency != 0) begin \
         VX_pipe_register #( \
@@ -384,11 +385,11 @@
             .clk      (clk), \
             .reset    (1'b0), \
             .enable   (1'b1), \
-            .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
-            .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
+            .data_in  ({src_prefix``_write_valid && ena, src_prefix``_write_addr, src_prefix``_write_data}), \
+            .data_out ({dst_prefix``_write_valid, dst_prefix``_write_addr, dst_prefix``_write_data}) \
         ); \
     end else begin \
-        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
+        assign {dst_prefix``_write_valid, dst_prefix``_write_addr, dst_prefix``_write_data} = {src_prefix``_write_valid && ena, src_prefix``_write_addr, src_prefix``_write_data}; \
     end \
     /* verilator lint_off GENUNNAMED */
 

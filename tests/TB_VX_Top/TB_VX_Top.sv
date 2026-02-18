@@ -47,9 +47,9 @@ module TB_VX_Top;
         .clk(clk),
         .reset(reset),
         
-        .write_valid(write_valid),
-        .write_addr(write_addr),
-        .write_data(write_data),
+        .dcr_bus_if_write_valid(write_valid),
+        .dcr_bus_if_write_addr(write_addr),
+        .dcr_bus_if_write_data(write_data),
 
         .mem_req_ready(mem_req_ready),
         .mem_req_valid(mem_req_valid),

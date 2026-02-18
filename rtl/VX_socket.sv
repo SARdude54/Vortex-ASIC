@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_mem_bus_if.vh"
 
+`include "VX_dcr_bus_if.vh"
 
 module VX_socket import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0,
@@ -29,16 +30,12 @@ module VX_socket import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
 `endif
-
-    // flattened DCR signals (dcr_bus_if)
-    input  logic                         dcr_write_valid,
-    input  logic [VX_DCR_ADDR_WIDTH-1:0] dcr_write_addr,
-    input  logic [VX_DCR_DATA_WIDTH-1:0] dcr_write_data,
-
-
     // memory bus signals (flattened)
     // mem_req_data [NPORTS]. Flattened input  vx_mem_req_data_t  mem_req_data [NPORTS],
     `VX_MEM_BUS_PORTS_IN(mem, NPORTS, ADDR_WIDTH, DATA_SIZE, FLAGS_WIDTH, UUID_WIDTH, TAG_WIDTH),
+    // DCRs
+    // flatten: VX_dcr_bus_if.slave     dcr_bus_if,
+    `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
 
 `ifdef GBAR_ENABLE
@@ -310,7 +307,10 @@ module VX_socket import VX_gpu_pkg::*; #(
 
         `RESET_RELAY (core_reset, reset);
 
-        VX_dcr_bus_if core_dcr_bus_if();
+        // flatten: VX_dcr_bus_if core_dcr_bus_if();
+        `VX_DCR_BUS_SIGNALS(core_dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH)
+
+        // modified
         `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, 1'b1, (`SOCKET_SIZE > 1))
 
         VX_core #(
@@ -318,7 +318,7 @@ module VX_socket import VX_gpu_pkg::*; #(
             .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
         ) core (
             `SCOPE_IO_BIND  (scope_core + core_id)
-
+            
             .clk            (clk),
             .reset          (core_reset),
 
@@ -326,7 +326,8 @@ module VX_socket import VX_gpu_pkg::*; #(
             .sysmem_perf    (sysmem_perf_tmp),
         `endif
 
-            .dcr_bus_if     (core_dcr_bus_if),
+            // .dcr_bus_if     (core_dcr_bus_if),
+            `VX_DCR_BUS_PASS_PORTS(dcr_bus_if, core_dcr_bus_if),
 
             .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
 
