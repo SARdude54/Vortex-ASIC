@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_schedule_if.vh"
 
 module VX_fetch import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -25,7 +26,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    icache_bus_if,
 
     // inputs
-    VX_schedule_if.slave    schedule_if,
+    // flatten: VX_schedule_if.master   schedule_if,
+    `VX_SCHEDULE_IF_CONSUMER_PORTS(schedule_if),
 
     // outputs
     VX_fetch_if.master      fetch_if
@@ -43,7 +45,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
 
-    assign req_tag = schedule_if.data.wid;
+    assign req_tag = schedule_if_data.wid;
 
     assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
 
@@ -62,7 +64,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .write (icache_req_fire),
         .wren  (1'b1),
         .waddr (req_tag),
-        .wdata ({schedule_if.data.PC, schedule_if.data.tmask}),
+        .wdata ({schedule_if_data.PC, schedule_if_data.tmask}),
         .raddr (rsp_tag),
         .rdata ({rsp_PC, rsp_tmask})
     );
@@ -78,7 +80,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
         ) pending_reads (
             .clk   (clk),
             .reset (reset),
-            .incr  (icache_req_fire && schedule_if.data.wid == i),
+            .incr  (icache_req_fire && schedule_if_data.wid == i),
             .decr  (fetch_if.ibuf_pop[i]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (alm_empty),
@@ -87,20 +89,20 @@ module VX_fetch import VX_gpu_pkg::*; #(
             `UNUSED_PIN (size)
         );
     end
-    wire ibuf_ready = ~pending_ibuf_full[schedule_if.data.wid];
+    wire ibuf_ready = ~pending_ibuf_full[schedule_if_data.wid];
 `else
     wire ibuf_ready = 1'b1;
 `endif
 
-    `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
-        ("%t: *** %s invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, INSTANCE_ID, to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
+    `RUNTIME_ASSERT((!schedule_if_valid || schedule_if_data.PC != 0),
+        ("%t: *** %s invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, INSTANCE_ID, to_fullPC(schedule_if_data.PC), schedule_if_data.wid, schedule_if_data.tmask, schedule_if_data.uuid))
 
     // Icache Request
 
-    assign icache_req_valid = schedule_if.valid && ibuf_ready;
-    assign icache_req_addr  = schedule_if.data.PC[2-(`XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH]; // 4-byte aligned addresses
-    assign icache_req_tag   = {schedule_if.data.uuid, req_tag};
-    assign schedule_if.ready = icache_req_ready && ibuf_ready;
+    assign icache_req_valid = schedule_if_valid && ibuf_ready;
+    assign icache_req_addr  = schedule_if_data.PC[2-(`XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH]; // 4-byte aligned addresses
+    assign icache_req_tag   = {schedule_if_data.uuid, req_tag};
+    assign schedule_if_ready = icache_req_ready && ibuf_ready;
 
     VX_elastic_buffer #(
         .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
@@ -135,7 +137,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH
     `SCOPE_IO_SWITCH (1);
-    wire schedule_fire = schedule_if.valid && schedule_if.ready;
+    wire schedule_fire = schedule_if_valid && schedule_if_ready;
     wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
     wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
     wire reset_negedge;
@@ -145,8 +147,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
             UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
             UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
         ), {
-            schedule_if.valid,
-            schedule_if.ready,
+            schedule_if_valid,
+            schedule_if_ready,
             icache_bus_if.req_valid,
             icache_bus_if.req_ready,
             icache_bus_if.rsp_valid,
@@ -156,7 +158,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
             icache_bus_req_fire,
             icache_bus_rsp_fire
         },{
-            schedule_if.data.uuid, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.PC,
+            schedule_if_data.uuid, schedule_if_data.wid, schedule_if_data.tmask, schedule_if_data.PC,
             icache_bus_if.req_data.tag.uuid, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
             icache_bus_if.rsp_data.tag.uuid, icache_bus_if.rsp_data.data
         },
@@ -171,7 +173,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_FETCH
     ila_fetch ila_fetch_inst (
         .clk    (clk),
-        .probe0 ({schedule_if.valid, schedule_if.data, schedule_if.ready}),
+        .probe0 ({schedule_if_valid, schedule_if_data, schedule_if_ready}),
         .probe1 ({icache_bus_if.req_valid, icache_bus_if.req_data, icache_bus_if.req_ready}),
         .probe2 ({icache_bus_if.rsp_valid, icache_bus_if.rsp_data, icache_bus_if.rsp_ready})
     );
@@ -180,8 +182,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
-        if (schedule_if.valid && schedule_if.ready) begin
-            `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, to_fullPC(schedule_if.data.PC), schedule_if.data.tmask, schedule_if.data.uuid))
+        if (schedule_if_valid && schedule_if_ready) begin
+            `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if_data.wid, to_fullPC(schedule_if_data.PC), schedule_if_data.tmask, schedule_if_data.uuid))
         end
         if (fetch_if.valid && fetch_if.ready) begin
             `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
