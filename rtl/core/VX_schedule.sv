@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_schedule_if.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -35,7 +36,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
     VX_commit_sched_if.slave commit_sched_if,
 
     // outputs
-    VX_schedule_if.master   schedule_if,
+    // flatten: VX_schedule_if.master   schedule_if,
+    `VX_SCHEDULE_IF_PRODUCER_PORTS(schedule_if),
+
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
 `endif
@@ -70,7 +73,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] cycles;
 
     wire schedule_fire = schedule_valid && schedule_ready;
-    wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
+    wire schedule_if_fire = schedule_if_valid && schedule_if_ready;
 
     // branch
     wire [`NUM_ALU_BLOCKS-1:0]               branch_valid;
@@ -205,7 +208,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
         // advance PC
         if (schedule_if_fire) begin
-            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`XLEN'(4));
+            warp_pcs_n[schedule_if_data.wid] = schedule_if_data.PC + from_fullPC(`XLEN'(4));
         end
     end
 
@@ -352,9 +355,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .valid_in  (schedule_valid),
         .ready_in  (schedule_ready),
         .data_in   ({schedule_tmask, schedule_pc, schedule_wid, instr_uuid}),
-        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.uuid}),
-        .valid_out (schedule_if.valid),
-        .ready_out (schedule_if.ready)
+        .data_out  ({schedule_if_data.tmask, schedule_if_data.PC, schedule_if_data.wid, schedule_if_data.uuid}),
+        .valid_out (schedule_if_valid),
+        .ready_out (schedule_if_ready)
     );
 
     // Track pending instructions per warp
@@ -419,7 +422,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_sched_stalls;
 
     wire schedule_idle = ~schedule_valid;
-    wire schedule_stall = schedule_if.valid && ~schedule_if.ready;
+    wire schedule_stall = schedule_if_valid && ~schedule_if_ready;
 
     always @(posedge clk) begin
         if (reset) begin

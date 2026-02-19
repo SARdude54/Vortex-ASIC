@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_dcr_bus_if.vh"
+`include "VX_schedule_if.vh"
 
 `ifdef EXT_F_ENABLE
 `include "VX_fpu_define.vh"
@@ -46,7 +47,9 @@ module VX_core import VX_gpu_pkg::*; #(
     // Status
     output wire             busy
 );
-    VX_schedule_if      schedule_if();
+    
+    // flatten VX_schedule_if      schedule_if();
+    `VX_SCHEDULE_IF_SIGNALS(schedule_if)
     VX_fetch_if         fetch_if();
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
@@ -81,7 +84,6 @@ module VX_core import VX_gpu_pkg::*; #(
 
     base_dcrs_t base_dcrs;
 
-    // TODO: Flatten this
     VX_dcr_data dcr_data (
         .clk        (clk),
         .reset      (reset),
@@ -112,7 +114,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .issue_sched_if (issue_sched_if),
         .commit_sched_if(commit_sched_if),
 
-        .schedule_if    (schedule_if),
+        // flatten: .schedule_if    (schedule_if),
+        `VX_SCHEDULE_IF_PASS_PORTS(schedule_if),
     `ifdef GBAR_ENABLE
         .gbar_bus_if    (gbar_bus_if),
     `endif
@@ -128,7 +131,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .icache_bus_if  (icache_bus_if),
-        .schedule_if    (schedule_if),
+        // flatten: .schedule_if    (schedule_if),
+        `VX_SCHEDULE_IF_PASS_PORTS(schedule_if),
         .fetch_if       (fetch_if)
     );
 
