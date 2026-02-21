@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_fetch_if.vh"
 
 `define USED_REG(t, x) \
     x``_v = make_reg_num(t, ``x); \
@@ -30,7 +31,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // inputs
-    VX_fetch_if.slave       fetch_if,
+    // flatten: VX_fetch_if.slave      fetch_if
+    `VX_FETCH_IF_CONSUMER_SIGNALS(fetch_if),
 
     // outputs
     VX_decode_if.master     decode_if,
@@ -50,7 +52,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg use_rd, use_rs1, use_rs2, use_rs3;
     reg is_wstall;
 
-    wire [31:0] instr = fetch_if.data.instr;
+    wire [31:0] instr = fetch_if_data.instr;
     wire [6:0] opcode = instr[6:0];
     wire [1:0] funct2 = instr[26:25];
     wire [2:0] funct3 = instr[14:12];
@@ -552,9 +554,9 @@ module VX_decode import VX_gpu_pkg::*; #(
     ) req_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (fetch_if.valid),
-        .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v}),
+        .valid_in  (fetch_if_valid),
+        .ready_in  (fetch_if_ready),
+        .data_in   ({fetch_if_data.uuid,  fetch_if_data.wid,  fetch_if_data.tmask,  fetch_if_data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v}),
         .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
@@ -562,14 +564,14 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire fetch_fire = fetch_if.valid && fetch_if.ready;
+    wire fetch_fire = fetch_if_valid && fetch_if_ready;
 
     assign decode_sched_if.valid  = fetch_fire;
-    assign decode_sched_if.wid    = fetch_if.data.wid;
+    assign decode_sched_if.wid    = fetch_if_data.wid;
     assign decode_sched_if.unlock = ~is_wstall;
 
 `ifndef L1_ENABLE
-    assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
+    assign fetch_if_ibuf_pop = decode_if.ibuf_pop;
 `endif
 
 endmodule
