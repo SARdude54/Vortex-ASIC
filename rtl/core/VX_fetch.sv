@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_schedule_if.vh"
+`include "VX_fetch_if.vh"
 
 module VX_fetch import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -30,7 +31,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     `VX_SCHEDULE_IF_CONSUMER_PORTS(schedule_if),
 
     // outputs
-    VX_fetch_if.master      fetch_if
+    // flatten: VX_fetch_if.master      fetch_if
+    `VX_FETCH_IF_PRODUCER_SIGNALS(fetch_if)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
@@ -81,7 +83,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .incr  (icache_req_fire && schedule_if_data.wid == i),
-            .decr  (fetch_if.ibuf_pop[i]),
+            .decr  (fetch_if_ibuf_pop[i]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (alm_empty),
             .full  (pending_ibuf_full[i]),
@@ -126,13 +128,13 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     // Icache Response
 
-    assign fetch_if.valid = icache_bus_if.rsp_valid;
-    assign fetch_if.data.tmask = rsp_tmask;
-    assign fetch_if.data.wid   = rsp_tag;
-    assign fetch_if.data.PC    = rsp_PC;
-    assign fetch_if.data.instr = icache_bus_if.rsp_data.data;
-    assign fetch_if.data.uuid  = rsp_uuid;
-    assign icache_bus_if.rsp_ready = fetch_if.ready;
+    assign fetch_if_valid = icache_bus_if.rsp_valid;
+    assign fetch_if_data.tmask = rsp_tmask;
+    assign fetch_if_data.wid   = rsp_tag;
+    assign fetch_if_data.PC    = rsp_PC;
+    assign fetch_if_data.instr = icache_bus_if.rsp_data.data;
+    assign fetch_if_data.uuid  = rsp_uuid;
+    assign icache_bus_if.rsp_ready = fetch_if_ready;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH
@@ -185,8 +187,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
         if (schedule_if_valid && schedule_if_ready) begin
             `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if_data.wid, to_fullPC(schedule_if_data.PC), schedule_if_data.tmask, schedule_if_data.uuid))
         end
-        if (fetch_if.valid && fetch_if.ready) begin
-            `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
+        if (fetch_if_valid && fetch_if_ready) begin
+            `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if_data.wid, to_fullPC(fetch_if_data.PC), fetch_if_data.tmask, fetch_if_data.instr, fetch_if_data.uuid))
         end
     end
 `endif

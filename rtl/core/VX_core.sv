@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_dcr_bus_if.vh"
 `include "VX_schedule_if.vh"
+`include "VX_fetch_if.vh"
 
 `ifdef EXT_F_ENABLE
 `include "VX_fpu_define.vh"
@@ -50,7 +51,8 @@ module VX_core import VX_gpu_pkg::*; #(
     
     // flatten VX_schedule_if      schedule_if();
     `VX_SCHEDULE_IF_SIGNALS(schedule_if)
-    VX_fetch_if         fetch_if();
+    // VX_fetch_if         fetch_if();
+    `VX_FETCH_IF_SIGNALS(fetch_if)
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
@@ -133,7 +135,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .icache_bus_if  (icache_bus_if),
         // flatten: .schedule_if    (schedule_if),
         `VX_SCHEDULE_IF_PASS_PORTS(schedule_if),
-        .fetch_if       (fetch_if)
+        // flatten: .fetch_if       (fetch_if)
+        `VX_FETCH_IF_PASS_PORTS(fetch_if)
     );
 
     VX_decode #(
@@ -141,7 +144,8 @@ module VX_core import VX_gpu_pkg::*; #(
     ) decode (
         .clk            (clk),
         .reset          (reset),
-        .fetch_if       (fetch_if),
+        // flatten: .fetch_if       (fetch_if)
+        `VX_FETCH_IF_PASS_PORTS(fetch_if),
         .decode_if      (decode_if),
         .decode_sched_if(decode_sched_if)
     );
