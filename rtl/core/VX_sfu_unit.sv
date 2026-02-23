@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_sched_csr_if.vh"
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -35,7 +36,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_commit_csr_if.slave  commit_csr_if,
-    VX_sched_csr_if.slave   sched_csr_if,
+    // VX_sched_csr_if.slave   sched_csr_if,
+    `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
@@ -131,7 +133,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .fpu_csr_if     (fpu_csr_if),
     `endif
 
-        .sched_csr_if   (sched_csr_if),
+        // flatten: .sched_csr_if   (sched_csr_if),
+        `VX_SCHED_CSR_IF_PASS_PORTS(sched_csr_if),
         .commit_csr_if  (commit_csr_if),
         .result_if      (pe_result_if[PE_IDX_CSRS])
     );

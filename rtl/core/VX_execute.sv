@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_sched_csr_if.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -39,7 +40,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_commit_if.master     commit_if [NUM_EX_UNITS * `ISSUE_WIDTH],
 
     // scheduler interfaces
-    VX_sched_csr_if.slave   sched_csr_if,
+    // flatten: VX_sched_csr_if.slave   sched_csr_if,
+    `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
+    
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_warp_ctl_if.master   warp_ctl_if,
 
@@ -114,7 +117,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .fpu_csr_if     (fpu_csr_if),
     `endif
         .commit_csr_if  (commit_csr_if),
-        .sched_csr_if   (sched_csr_if),
+        // flatten: .sched_csr_if   (sched_csr_if),
+        `VX_SCHED_CSR_IF_PASS_PORTS(sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)
     );
 

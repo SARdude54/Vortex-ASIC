@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_sched_csr_if.vh"
 
 module VX_csr_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -33,7 +34,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_commit_csr_if.slave      commit_csr_if,
-    VX_sched_csr_if.slave       sched_csr_if,
+    // flatten: VX_sched_csr_if.slave       sched_csr_if,
+    `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
@@ -58,8 +60,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 
     // wait for all pending instructions for current warp to complete
-    assign sched_csr_if.alm_empty_wid = execute_if.data.wid;
-    wire no_pending_instr = sched_csr_if.alm_empty || ~is_fpu_csr;
+    assign sched_csr_if_alm_empty_wid = execute_if.data.wid;
+    wire no_pending_instr = sched_csr_if_alm_empty || ~is_fpu_csr;
 
     wire csr_req_valid = execute_if.valid && no_pending_instr;
     assign execute_if.ready = csr_req_ready && no_pending_instr;
@@ -87,9 +89,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `endif
 
         .commit_csr_if  (commit_csr_if),
-        .cycles         (sched_csr_if.cycles),
-        .active_warps   (sched_csr_if.active_warps),
-        .thread_masks   (sched_csr_if.thread_masks),
+        .cycles         (sched_csr_if_cycles),
+        .active_warps   (sched_csr_if_active_warps),
+        .thread_masks   (sched_csr_if_thread_masks),
 
     `ifdef EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),
@@ -158,8 +160,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     // unlock the warp
-    assign sched_csr_if.unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.eop && is_fpu_csr;
-    assign sched_csr_if.unlock_wid = execute_if.data.wid;
+    assign sched_csr_if_unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.eop && is_fpu_csr;
+    assign sched_csr_if_unlock_wid = execute_if.data.wid;
 
     VX_elastic_buffer #(
         .DATAW (DATAW),
