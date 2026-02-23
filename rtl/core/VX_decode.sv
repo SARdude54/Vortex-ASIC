@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_fetch_if.vh"
+`include "VX_decode_if.vh"
 
 `define USED_REG(t, x) \
     x``_v = make_reg_num(t, ``x); \
@@ -35,7 +36,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     `VX_FETCH_IF_CONSUMER_SIGNALS(fetch_if),
 
     // outputs
-    VX_decode_if.master     decode_if,
+    // flatten: VX_decode_if.master     decode_if,
+    `VX_DECODE_IF_PRODUCER_PORTS(decode_if),
     VX_decode_sched_if.master decode_sched_if
 );
 
@@ -557,9 +559,9 @@ module VX_decode import VX_gpu_pkg::*; #(
         .valid_in  (fetch_if_valid),
         .ready_in  (fetch_if_ready),
         .data_in   ({fetch_if_data.uuid,  fetch_if_data.wid,  fetch_if_data.tmask,  fetch_if_data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
-        .valid_out (decode_if.valid),
-        .ready_out (decode_if.ready)
+        .data_out  ({decode_if_data.uuid, decode_if_data.wid, decode_if_data.tmask, decode_if_data.PC, decode_if_data.ex_type, decode_if_data.op_type, decode_if_data.op_args, decode_if_data.wb, decode_if_data.used_rs, decode_if_data.rd, decode_if_data.rs1, decode_if_data.rs2, decode_if_data.rs3}),
+        .valid_out (decode_if_valid),
+        .ready_out (decode_if_ready)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -571,7 +573,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     assign decode_sched_if.unlock = ~is_wstall;
 
 `ifndef L1_ENABLE
-    assign fetch_if_ibuf_pop = decode_if.ibuf_pop;
+    assign fetch_if_ibuf_pop = decode_if_ibuf_pop;
 `endif
 
 endmodule

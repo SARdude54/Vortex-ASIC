@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_decode_if.vh"
 
 module VX_ibuffer import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -25,7 +26,8 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
 `endif
 
     // inputs
-    VX_decode_if.slave  decode_if,
+    // VX_decode_if.slave  decode_if,
+    `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
 
     // outputs
     VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
@@ -35,10 +37,10 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
 
     localparam OUT_DATAW = $bits(ibuffer_t);
 
-    wire [ISSUE_WIS_W-1:0] decode_wis = wid_to_wis(decode_if.data.wid);
+    wire [ISSUE_WIS_W-1:0] decode_wis = wid_to_wis(decode_if_data.wid);
 
     wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
-    assign decode_if.ready = ibuf_ready_in[decode_wis];
+    assign decode_if_ready = ibuf_ready_in[decode_wis];
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_instr_bufs
         VX_ibuffer_if uop_sequencer_if();
@@ -49,20 +51,20 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         ) instr_buf (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (decode_if.valid && decode_wis == ISSUE_WIS_W'(w)),
+            .valid_in (decode_if_valid && decode_wis == ISSUE_WIS_W'(w)),
             .data_in  ({
-                decode_if.data.uuid,
-                decode_if.data.tmask,
-                decode_if.data.PC,
-                decode_if.data.ex_type,
-                decode_if.data.op_type,
-                decode_if.data.op_args,
-                decode_if.data.wb,
-                decode_if.data.used_rs,
-                decode_if.data.rd,
-                decode_if.data.rs1,
-                decode_if.data.rs2,
-                decode_if.data.rs3
+                decode_if_data.uuid,
+                decode_if_data.tmask,
+                decode_if_data.PC,
+                decode_if_data.ex_type,
+                decode_if_data.op_type,
+                decode_if_data.op_args,
+                decode_if_data.wb,
+                decode_if_data.used_rs,
+                decode_if_data.rd,
+                decode_if_data.rs1,
+                decode_if_data.rs2,
+                decode_if_data.rs3
             }),
             .ready_in (ibuf_ready_in[w]),
             .valid_out(uop_sequencer_if.valid),
@@ -70,7 +72,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
             .ready_out(uop_sequencer_if.ready)
         );
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[w] = uop_sequencer_if.valid && uop_sequencer_if.ready;
+        assign decode_if_ibuf_pop[w] = uop_sequencer_if.valid && uop_sequencer_if.ready;
     `endif
 
         VX_uop_sequencer uop_sequencer (
@@ -84,7 +86,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     reg [PERF_CTR_BITS-1:0] perf_ibf_stalls;
 
-    wire decode_if_stall = decode_if.valid && ~decode_if.ready;
+    wire decode_if_stall = decode_if_valid && ~decode_if_ready;
 
     always @(posedge clk) begin
         if (reset) begin

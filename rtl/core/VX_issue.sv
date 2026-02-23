@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_decode_if.vh"
 
 module VX_issue import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -25,7 +26,8 @@ module VX_issue import VX_gpu_pkg::*; #(
     output issue_perf_t     issue_perf,
 `endif
 
-    VX_decode_if.slave      decode_if,
+    //flatten: VX_decode_if.slave      decode_if,
+    `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
     VX_issue_sched_if.master issue_sched_if[`ISSUE_WIDTH]
@@ -45,24 +47,26 @@ module VX_issue import VX_gpu_pkg::*; #(
     end
 `endif
 
-    wire [ISSUE_ISW_W-1:0] decode_isw = wid_to_isw(decode_if.data.wid);
+    wire [ISSUE_ISW_W-1:0] decode_isw = wid_to_isw(decode_if_data.wid);
 
     wire [`ISSUE_WIDTH-1:0] decode_ready_in;
-    assign decode_if.ready = decode_ready_in[decode_isw];
+    assign decode_if_ready = decode_ready_in[decode_isw];
 
     `SCOPE_IO_SWITCH (`ISSUE_WIDTH);
 
     for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_slices
-        VX_decode_if slice_decode_if();
+        // flatten: VX_decode_if slice_decode_if();
+        `VX_DECODE_IF_SIGNALS(slice_decode_if)
+
 
         VX_dispatch_if per_issue_dispatch_if[NUM_EX_UNITS]();
 
-        assign slice_decode_if.valid = decode_if.valid && (decode_isw == issue_id);
-        assign slice_decode_if.data  = decode_if.data;
-        assign decode_ready_in[issue_id] = slice_decode_if.ready;
+        assign slice_decode_if_valid = decode_if_valid && (decode_isw == issue_id);
+        assign slice_decode_if_data  = decode_if_data;
+        assign decode_ready_in[issue_id] = slice_decode_if_ready;
 
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = slice_decode_if.ibuf_pop;
+        assign decode_if_ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = slice_decode_if_ibuf_pop;
     `endif
 
         VX_issue_slice #(
@@ -75,7 +79,8 @@ module VX_issue import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .issue_perf   (per_issue_perf[issue_id]),
         `endif
-            .decode_if    (slice_decode_if),
+            // flatten: .decode_if    (slice_decode_if),
+            `VX_DECODE_IF_PASS_PORTS(decode_if, slice_decode_if),
             .writeback_if (writeback_if[issue_id]),
             .dispatch_if  (per_issue_dispatch_if),
             .issue_sched_if(issue_sched_if[issue_id])
