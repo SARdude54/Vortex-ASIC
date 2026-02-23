@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_decode_if.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -26,7 +27,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     output issue_perf_t     issue_perf,
 `endif
 
-    VX_decode_if.slave      decode_if,
+    // VX_decode_if.slave      decode_if,
+    `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
     VX_writeback_if.slave   writeback_if,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
     VX_issue_sched_if.master issue_sched_if
@@ -46,7 +48,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
      `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.ibf_stalls),
      `endif
-        .decode_if      (decode_if),
+        // .decode_if      (decode_if),
+        `VX_DECODE_IF_PASS_PORTS(decode_if, decode_if),
         .ibuffer_if     (ibuffer_if)
     );
 
@@ -100,7 +103,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE
     `SCOPE_IO_SWITCH (1);
-    wire decode_fire = decode_if.valid && decode_if.ready;
+    wire decode_fire = decode_if_valid && decode_if_ready;
     wire operands_fire = operands_if.valid && operands_if.ready;
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
@@ -109,8 +112,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS + (3 * `XLEN) +
             UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + NUM_REGS_BITS + (`SIMD_WIDTH * `XLEN) + 1
         ), {
-            decode_if.valid,
-            decode_if.ready,
+            decode_if_valid,
+            decode_if_ready,
             operands_if.valid,
             operands_if.ready
         }, {
@@ -118,17 +121,17 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             operands_fire,
             writeback_if.valid // ack-free
         }, {
-            decode_if.data.uuid,
-            decode_if.data.wid,
-            decode_if.data.tmask,
-            decode_if.data.PC,
-            decode_if.data.ex_type,
-            decode_if.data.op_type,
-            decode_if.data.wb,
-            decode_if.data.rd,
-            decode_if.data.rs1,
-            decode_if.data.rs2,
-            decode_if.data.rs3,
+            decode_if_data.uuid,
+            decode_if_data.wid,
+            decode_if_data.tmask,
+            decode_if_data.PC,
+            decode_if_data.ex_type,
+            decode_if_data.op_type,
+            decode_if_data.wb,
+            decode_if_data.rd,
+            decode_if_data.rs1,
+            decode_if_data.rs2,
+            decode_if_data.rs3,
             operands_if.data.uuid,
             operands_if.data.wis,
             operands_if.data.tmask,
@@ -158,7 +161,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_ISSUE
     ila_issue ila_issue_inst (
         .clk    (clk),
-        .probe0 ({decode_if.valid, decode_if.data, decode_if.ready}),
+        .probe0 ({decode_if_valid, decode_if_data, decode_if_ready}),
         .probe1 ({scoreboard_if.valid, scoreboard_if.data, scoreboard_if.ready}),
         .probe2 ({operands_if.valid, operands_if.data, operands_if.ready}),
         .probe3 ({writeback_if.valid, writeback_if.data})
