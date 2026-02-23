@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_fetch_if.vh"
 `include "VX_decode_if.vh"
+`include "VX_decode_sched_if.vh"
 
 `define USED_REG(t, x) \
     x``_v = make_reg_num(t, ``x); \
@@ -38,7 +39,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     // outputs
     // flatten: VX_decode_if.master     decode_if,
     `VX_DECODE_IF_PRODUCER_PORTS(decode_if),
-    VX_decode_sched_if.master decode_sched_if
+    // flatten: VX_decode_sched_if.master decode_sched_if
+    `VX_DECODE_SCHED_IF_PRODUCER_PORTS(decode_sched_if)
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -568,9 +570,9 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     wire fetch_fire = fetch_if_valid && fetch_if_ready;
 
-    assign decode_sched_if.valid  = fetch_fire;
-    assign decode_sched_if.wid    = fetch_if_data.wid;
-    assign decode_sched_if.unlock = ~is_wstall;
+    assign decode_sched_if_valid  = fetch_fire;
+    assign decode_sched_if_wid    = fetch_if_data.wid;
+    assign decode_sched_if_unlock = ~is_wstall;
 
 `ifndef L1_ENABLE
     assign fetch_if_ibuf_pop = decode_if_ibuf_pop;

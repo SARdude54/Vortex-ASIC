@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_schedule_if.vh"
 `include "VX_sched_csr_if.vh"
+`include "VX_decode_sched_if.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -32,7 +33,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // inputsdecode_if
     VX_warp_ctl_if.slave    warp_ctl_if,
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
-    VX_decode_sched_if.slave decode_sched_if,
+    // flatten: VX_decode_sched_if.slave decode_sched_if,
+    `VX_DECODE_SCHED_IF_CONSUMER_PORTS(decode_sched_if),
     VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
     VX_commit_sched_if.slave commit_sched_if,
 
@@ -118,8 +120,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
         warp_pcs_n      = warp_pcs;
 
         // decode unlock
-        if (decode_sched_if.valid && decode_sched_if.unlock) begin
-            stalled_warps_n[decode_sched_if.wid] = 0;
+        if (decode_sched_if_valid && decode_sched_if_unlock) begin
+            stalled_warps_n[decode_sched_if_wid] = 0;
         end
 
         // CSR unlock
@@ -407,7 +409,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
-            if (decode_sched_if.valid && decode_sched_if.unlock) begin
+            if (decode_sched_if_valid && decode_sched_if_unlock) begin
                 timeout_enable <= 1;
             end
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
