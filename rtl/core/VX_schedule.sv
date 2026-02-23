@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_schedule_if.vh"
+`include "VX_sched_csr_if.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -42,7 +43,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
 `endif
-    VX_sched_csr_if.master  sched_csr_if,
+    // flatten: VX_sched_csr_if.master  sched_csr_if,
+    `VX_SCHED_CSR_IF_PRODUCER_PORTS(sched_csr_if),
 
     // status
     output wire             busy
@@ -121,8 +123,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
 
         // CSR unlock
-        if (sched_csr_if.unlock_warp) begin
-            stalled_warps_n[sched_csr_if.unlock_wid] = 0;
+        if (sched_csr_if_unlock_warp) begin
+            stalled_warps_n[sched_csr_if_unlock_wid] = 0;
         end
 
         // wspawn handling
@@ -386,16 +388,16 @@ module VX_schedule import VX_gpu_pkg::*; #(
         );
 	end
 
-    assign sched_csr_if.alm_empty = pending_warp_alm_empty[sched_csr_if.alm_empty_wid];
+    assign sched_csr_if_alm_empty = pending_warp_alm_empty[sched_csr_if_alm_empty_wid];
 
     wire no_pending_instr = (& pending_warp_empty);
 
     `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1, 1);
 
     // export CSRs
-    assign sched_csr_if.cycles = cycles;
-    assign sched_csr_if.active_warps = active_warps;
-    assign sched_csr_if.thread_masks = thread_masks;
+    assign sched_csr_if_cycles = cycles;
+    assign sched_csr_if_active_warps = active_warps;
+    assign sched_csr_if_thread_masks = thread_masks;
 
    // timeout handling
     reg [31:0] timeout_ctr;
