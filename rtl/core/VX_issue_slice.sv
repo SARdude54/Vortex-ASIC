@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_decode_if.vh"
+`include "VX_issue_sched_if.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -31,7 +32,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
     VX_writeback_if.slave   writeback_if,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
-    VX_issue_sched_if.master issue_sched_if
+
+    // VX_issue_sched_if.master issue_sched_if
+    `VX_ISSUE_SCHED_IF_PRODUCER_PORTS(issue_sched_if, 1)
 );
     `UNUSED_PARAM (ISSUE_ID)
 
@@ -97,8 +100,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     // notify scheduler
-    assign issue_sched_if.valid = operands_if.valid && operands_if.ready && operands_if.data.sop;
-    assign issue_sched_if.wis = operands_if.data.wis;
+    assign issue_sched_if_valid = operands_if.valid && operands_if.ready && operands_if.data.sop;
+    assign issue_sched_if_wis = operands_if.data.wis;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE

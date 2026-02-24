@@ -15,6 +15,7 @@
 `include "VX_schedule_if.vh"
 `include "VX_sched_csr_if.vh"
 `include "VX_decode_sched_if.vh"
+`include "VX_issue_sched_if.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -35,7 +36,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     // flatten: VX_decode_sched_if.slave decode_sched_if,
     `VX_DECODE_SCHED_IF_CONSUMER_PORTS(decode_sched_if),
-    VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
+    // flatten: VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
+    `VX_ISSUE_SCHED_IF_CONSUMER_PORTS(issue_sched_if, `ISSUE_WIDTH),
     VX_commit_sched_if.slave commit_sched_if,
 
     // outputs
@@ -380,7 +382,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
         ) counter (
             .clk       (clk),
             .reset     (reset),
-            .incr      (issue_sched_if[isw].valid && (issue_sched_if[isw].wis == wis)),
+            // flatten multidimenional: .incr      (issue_sched_if[isw].valid && (issue_sched_if[isw].wis == wis)),
+            .incr      (`VX_ISSUE_SCHED_IF_VALID_BIT(issue_sched_if, isw) && `VX_ISSUE_SCHED_IF_WIS_SLICE(issue_sched_if, isw) == wis),
             .decr      (commit_sched_if.committed_warps[i]),
             .empty     (pending_warp_empty[i]),
             .alm_empty (pending_warp_alm_empty[i]),
