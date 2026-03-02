@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_commit_sched_if.vh"
 
 module VX_commit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -25,7 +26,8 @@ module VX_commit import VX_gpu_pkg::*; #(
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
     VX_commit_csr_if.master commit_csr_if,
-    VX_commit_sched_if.master commit_sched_if
+    // VX_commit_sched_if.master commit_sched_if
+    `VX_COMMIT_SCHED_IF_PRODUCER_PORTS(commit_sched_if)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam OUT_DATAW = $bits(commit_t);
@@ -155,7 +157,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         .reset    (reset),
         .enable   (1'b1),
         .data_in  (committed_warps),
-        .data_out ({commit_sched_if.committed_warps})
+        .data_out ({commit_sched_if_committed_warps})
     );
 
     // Writeback
