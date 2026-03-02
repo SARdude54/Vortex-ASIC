@@ -20,6 +20,7 @@
 `include "VX_sched_csr_if.vh"
 `include "VX_decode_sched_if.vh"
 `include "VX_issue_sched_if.vh"
+`include "VX_commit_sched_if.vh"
 
 
 `ifdef EXT_F_ENABLE
@@ -67,8 +68,10 @@ module VX_core import VX_gpu_pkg::*; #(
     `VX_DECODE_SCHED_IF_SIGNALS(decode_sched_if);
     // flatten: VX_issue_sched_if   issue_sched_if[`ISSUE_WIDTH]();
     `VX_ISSUE_SCHED_IF_SIGNALS(issue_sched_if, `ISSUE_WIDTH);
-    VX_commit_sched_if  commit_sched_if();
+    // VX_commit_sched_if  commit_sched_if();
+    `VX_COMMIT_SCHED_IF_SIGNALS(commit_sched_if);
     VX_commit_csr_if    commit_csr_if();
+
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 
@@ -126,7 +129,8 @@ module VX_core import VX_gpu_pkg::*; #(
         `VX_DECODE_SCHED_IF_PASS_PORTS(decode_sched_if),
         // flatten: .issue_sched_if (issue_sched_if),
         `VX_ISSUE_SCHED_IF_PASS_PORTS(issue_sched_if),
-        .commit_sched_if(commit_sched_if),
+        // .commit_sched_if(commit_sched_if),
+        `VX_COMMIT_SCHED_IF_PASS_PORTS(commit_sched_if),
 
         // flatten: .schedule_if    (schedule_if),
         `VX_SCHEDULE_IF_PASS_PORTS(schedule_if),
@@ -225,7 +229,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .writeback_if   (writeback_if),
 
         .commit_csr_if  (commit_csr_if),
-        .commit_sched_if(commit_sched_if)
+        // .commit_sched_if(commit_sched_if)
+        `VX_COMMIT_SCHED_IF_PASS_PORTS(commit_sched_if)
     );
 
     VX_mem_unit #(
