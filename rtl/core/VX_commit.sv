@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_commit_sched_if.vh"
+`include "VX_commit_csr_if.vh"
 
 module VX_commit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -25,7 +26,8 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
-    VX_commit_csr_if.master commit_csr_if,
+    // VX_commit_csr_if.master commit_csr_if,
+    `VX_COMMIT_CSR_IF_PRODUCER_PORTS(commit_csr_if),
     // VX_commit_sched_if.master commit_sched_if
     `VX_COMMIT_SCHED_IF_PRODUCER_PORTS(commit_sched_if)
 );
@@ -134,7 +136,7 @@ module VX_commit import VX_gpu_pkg::*; #(
             end
         end
     end
-    assign commit_csr_if.instret = instret;
+    assign commit_csr_if_instret = instret;
 
     // Track committed instructions
 
