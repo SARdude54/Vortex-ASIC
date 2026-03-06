@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_sched_csr_if.vh"
+`include "VX_commit_csr_if.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -47,7 +48,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.master   warp_ctl_if,
 
     // commit interface
-    VX_commit_csr_if.slave  commit_csr_if
+    // VX_commit_csr_if.slave  commit_csr_if
+    `VX_COMMIT_CSR_IF_CONSUMER_PORTS(commit_csr_if)
 );
 
 `ifdef EXT_F_ENABLE
@@ -116,7 +118,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_csr_if     (fpu_csr_if),
     `endif
-        .commit_csr_if  (commit_csr_if),
+        // .commit_csr_if  (commit_csr_if),
+        `VX_COMMIT_CSR_IF_PASS_PORTS(commit_csr_if),
         // flatten: .sched_csr_if   (sched_csr_if),
         `VX_SCHED_CSR_IF_PASS_PORTS(sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)

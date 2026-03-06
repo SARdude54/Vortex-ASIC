@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_commit_csr_if.vh"
 
 `ifdef EXT_F_ENABLE
 `include "VX_fpu_define.vh"
@@ -45,7 +46,8 @@ import VX_fpu_pkg::*;
     input pipeline_perf_t               pipeline_perf,
 `endif
 
-    VX_commit_csr_if.slave              commit_csr_if,
+    // VX_commit_csr_if.slave              commit_csr_if,
+    `VX_COMMIT_CSR_IF_CONSUMER_PORTS(commit_csr_if),
 
 `ifdef EXT_F_ENABLE
     VX_fpu_csr_if.slave                 fpu_csr_if [`NUM_FPU_BLOCKS],
@@ -189,7 +191,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_MPM_RESERVED : read_data_ro_w = 'x;
             `VX_CSR_MPM_RESERVED_H : read_data_ro_w = 'x;
 
-            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, commit_csr_if.instret);
+            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, commit_csr_if_instret);
 
             `VX_CSR_SATP,
             `VX_CSR_MSTATUS,
