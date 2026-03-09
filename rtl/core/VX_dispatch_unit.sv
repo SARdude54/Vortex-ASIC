@@ -23,7 +23,10 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     input  wire             reset,
 
     // inputs
-    VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    // VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    input logic[`ISSUE_WIDTH-1:0] dispatch_if_valid,
+    input dispatch_t dispatch_if_data [`ISSUE_WIDTH-1:0],
+    output logic [`ISSUE_WIDTH-1:0] dispatch_if_ready,
 
     // outputs
     VX_execute_if.master    execute_if [BLOCK_SIZE]
@@ -56,9 +59,9 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0] dispatch_ready;
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_dispatch_data
-        assign dispatch_valid[i] = dispatch_if[i].valid;
-        assign dispatch_data[i] = dispatch_if[i].data;
-        assign dispatch_if[i].ready = dispatch_ready[i];
+        assign dispatch_valid[i] = dispatch_if_valid[i];
+        assign dispatch_data[i] = dispatch_if_data[i];
+        assign dispatch_if_ready[i] = dispatch_ready[i];
     end
 
     wire [BLOCK_SIZE-1:0] block_ready;

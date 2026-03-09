@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_dispatch_if.vh"
 
 module VX_dispatch import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -27,7 +28,8 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     VX_operands_if.slave    operands_if,
 
     // outputs
-    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
+    // VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
+    `VX_DISPATCH_IF_PRODUCER_PORTS(dispatch_if, NUM_EX_UNITS)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (ISSUE_ID)
@@ -63,9 +65,9 @@ module VX_dispatch import VX_gpu_pkg::*; #(
                 operands_if.data.sop,
                 operands_if.data.eop
             }),
-            .data_out   (dispatch_if[i].data),
-            .valid_out  (dispatch_if[i].valid),
-            .ready_out  (dispatch_if[i].ready)
+            .data_out   (dispatch_if_data[i]),
+            .valid_out  (dispatch_if_valid[i]),
+            .ready_out  (dispatch_if_ready[i])
         );
     end
 

@@ -24,6 +24,7 @@
 `include "VX_commit_csr_if.vh"
 `include "VX_branch_ctl_if.vh"
 `include "VX_warp_ctl_if.vh"
+`include "VX_dispatch_if.vh"
 
 
 `ifdef EXT_F_ENABLE
@@ -82,7 +83,9 @@ module VX_core import VX_gpu_pkg::*; #(
     // flatten: VX_warp_ctl_if      warp_ctl_if();
     `VX_WARP_CTL_IF_SIGNALS(warp_ctl_if)
 
-    VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
+    // VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
+    `VX_DISPATCH_IF_SIGNALS(dispatch_if, NUM_EX_UNITS * `ISSUE_WIDTH)
+
     VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
 
@@ -193,7 +196,8 @@ module VX_core import VX_gpu_pkg::*; #(
         // flatten: .decode_if      (decode_if),
         `VX_DECODE_IF_PASS_PORTS(decode_if, decode_if),
         .writeback_if   (writeback_if),
-        .dispatch_if    (dispatch_if),
+        // .dispatch_if    (dispatch_if),
+        `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, dispatch_if),
         // flatten: .issue_sched_if (issue_sched_if)
         `VX_ISSUE_SCHED_IF_PASS_PORTS(issue_sched_if)
     );
@@ -216,7 +220,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .lsu_mem_if     (lsu_mem_if),
 
-        .dispatch_if    (dispatch_if),
+        // .dispatch_if    (dispatch_if),
+        `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, dispatch_if),
         .commit_if      (commit_if),
 
         // .commit_csr_if  (commit_csr_if),
