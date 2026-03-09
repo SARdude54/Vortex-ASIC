@@ -17,6 +17,7 @@
 `include "VX_decode_sched_if.vh"
 `include "VX_issue_sched_if.vh"
 `include "VX_commit_sched_if.vh"
+`include "VX_branch_ctl_if.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -34,7 +35,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // inputsdecode_if
     VX_warp_ctl_if.slave    warp_ctl_if,
-    VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
+
+    // VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
+    `VX_BRANCH_CTL_IF_CONSUMER_PORTS(branch_ctl_if, `NUM_ALU_BLOCKS),
+
     // flatten: VX_decode_sched_if.slave decode_sched_if,
     `VX_DECODE_SCHED_IF_CONSUMER_PORTS(decode_sched_if),
     // flatten: VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
@@ -89,10 +93,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_ALU_BLOCKS-1:0]               branch_taken;
     wire [`NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]  branch_dest;
     for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
-        assign branch_valid[i] = branch_ctl_if[i].valid;
-        assign branch_wid[i]   = branch_ctl_if[i].wid;
-        assign branch_taken[i] = branch_ctl_if[i].taken;
-        assign branch_dest[i]  = branch_ctl_if[i].dest;
+        assign branch_valid[i] = branch_ctl_if_valid[i];
+        assign branch_wid[i]   = `VX_BRANCH_CTL_IF_SLICE_WID(branch_ctl_if, i); // branch_ctl_if[i].wid;
+        assign branch_taken[i] = branch_ctl_if_taken[i];
+        assign branch_dest[i]  = `VX_BRANCH_CTL_IF_SLICE_DEST(branch_ctl_if, i); // // branch_ctl_if[i].dest;
     end
 
     // barriers
