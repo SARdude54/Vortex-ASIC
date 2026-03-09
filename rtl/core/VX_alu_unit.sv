@@ -21,7 +21,10 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    // VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    input logic[`ISSUE_WIDTH-1:0] dispatch_if_valid,
+    input dispatch_t dispatch_if_data [`ISSUE_WIDTH-1:0],
+    output logic [`ISSUE_WIDTH-1:0] dispatch_if_ready,
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
@@ -53,7 +56,10 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     ) dispatch_unit (
         .clk        (clk),
         .reset      (reset),
-        .dispatch_if(dispatch_if),
+
+        .dispatch_if_valid(dispatch_if_valid),
+        .dispatch_if_data(dispatch_if_data),
+        .dispatch_if_ready(dispatch_if_ready),
         .execute_if (per_block_execute_if)
     );
 

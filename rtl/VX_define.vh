@@ -278,7 +278,7 @@
 `define TO_FULL_ADDR(x) {x, (`MEM_ADDR_WIDTH-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
-
+// modified
 `define ASSIGN_VX_IF(dst, src) \
     assign dst.valid = src.valid; \
     assign dst.data  = src.data; \

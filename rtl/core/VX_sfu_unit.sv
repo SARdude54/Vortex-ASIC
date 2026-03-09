@@ -31,7 +31,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     input base_dcrs_t       base_dcrs,
 
     // Inputs
-    VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    // VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    input logic[`ISSUE_WIDTH-1:0] dispatch_if_valid,
+    input dispatch_t dispatch_if_data [`ISSUE_WIDTH-1:0],
+    output logic [`ISSUE_WIDTH-1:0] dispatch_if_ready,
 
 `ifdef EXT_F_ENABLE
     VX_fpu_csr_if.slave     fpu_csr_if [`NUM_FPU_BLOCKS],
@@ -70,7 +73,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     ) dispatch_unit (
         .clk        (clk),
         .reset      (reset),
-        .dispatch_if(dispatch_if),
+        // .dispatch_if(dispatch_if),
+        .dispatch_if_valid(dispatch_if_valid),
+        .dispatch_if_data(dispatch_if_data),
+        .dispatch_if_ready(dispatch_if_ready),
         .execute_if (per_block_execute_if)
     );
 

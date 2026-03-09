@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_decode_if.vh"
 `include "VX_issue_sched_if.vh"
+`include "VX_dispatch_if.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -31,7 +32,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     // VX_decode_if.slave      decode_if,
     `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
     VX_writeback_if.slave   writeback_if,
-    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
+    // VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
+    `VX_DISPATCH_IF_PRODUCER_PORTS(dispatch_if, NUM_EX_UNITS),
 
     // VX_issue_sched_if.master issue_sched_if
     `VX_ISSUE_SCHED_IF_PRODUCER_PORTS(issue_sched_if, 1)
@@ -96,7 +98,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         `UNUSED_PIN     (perf_stalls),
     `endif
         .operands_if    (operands_if),
-        .dispatch_if    (dispatch_if)
+        // .dispatch_if    (dispatch_if)
+        `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, dispatch_if)
     );
 
     // notify scheduler

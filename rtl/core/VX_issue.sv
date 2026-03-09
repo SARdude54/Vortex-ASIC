@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_decode_if.vh"
 `include "VX_issue_sched_if.vh"
+`include "VX_dispatch_if.vh"
 
 module VX_issue import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -30,7 +31,9 @@ module VX_issue import VX_gpu_pkg::*; #(
     //flatten: VX_decode_if.slave      decode_if,
     `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
+    // VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
+    `VX_DISPATCH_IF_PRODUCER_PORTS(dispatch_if, NUM_EX_UNITS * `ISSUE_WIDTH),
+    
     // flatten: VX_issue_sched_if.master issue_sched_if[`ISSUE_WIDTH]
     `VX_ISSUE_SCHED_IF_PRODUCER_PORTS(issue_sched_if, `ISSUE_WIDTH)
 );
@@ -61,7 +64,8 @@ module VX_issue import VX_gpu_pkg::*; #(
         `VX_DECODE_IF_SIGNALS(slice_decode_if)
 
 
-        VX_dispatch_if per_issue_dispatch_if[NUM_EX_UNITS]();
+        // VX_dispatch_if per_issue_dispatch_if[NUM_EX_UNITS]();
+        `VX_DISPATCH_IF_SIGNALS(per_issue_dispatch_if, NUM_EX_UNITS);
 
         assign slice_decode_if_valid = decode_if_valid && (decode_isw == issue_id);
         assign slice_decode_if_data  = decode_if_data;
@@ -84,7 +88,8 @@ module VX_issue import VX_gpu_pkg::*; #(
             // flatten: .decode_if    (slice_decode_if),
             `VX_DECODE_IF_PASS_PORTS(decode_if, slice_decode_if),
             .writeback_if (writeback_if[issue_id]),
-            .dispatch_if  (per_issue_dispatch_if),
+            // .dispatch_if  (per_issue_dispatch_if),
+            `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, per_issue_dispatch_if),
             // flatten passing ports and multidimensional .issue_sched_if(issue_sched_if[issue_id])
             .issue_sched_if_valid(`VX_ISSUE_SCHED_IF_VALID_BIT(issue_sched_if, issue_id)),
             .issue_sched_if_wis(`VX_ISSUE_SCHED_IF_WIS_SLICE(issue_sched_if, issue_id))
@@ -92,7 +97,11 @@ module VX_issue import VX_gpu_pkg::*; #(
 
         // Assign transposed dispatch_if
         for (genvar ex_id = 0; ex_id < NUM_EX_UNITS; ++ex_id) begin : g_dispatch_if
-            `ASSIGN_VX_IF(dispatch_if[ex_id * `ISSUE_WIDTH + issue_id], per_issue_dispatch_if[ex_id]);
+            // do this manually: `ASSIGN_VX_IF(dispatch_if[ex_id * `ISSUE_WIDTH + issue_id], per_issue_dispatch_if[ex_id]);
+            assign dispatch_if_valid[ex_id * `ISSUE_WIDTH + issue_id] = per_issue_dispatch_if_valid[ex_id];
+            assign dispatch_if_data[ex_id * `ISSUE_WIDTH + issue_id] = per_issue_dispatch_if_data[ex_id];
+            assign per_issue_dispatch_if_ready[ex_id] = dispatch_if_ready[ex_id * `ISSUE_WIDTH + issue_id];
+ 
         end
      end
 
