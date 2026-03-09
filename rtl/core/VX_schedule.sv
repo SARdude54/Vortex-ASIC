@@ -18,6 +18,7 @@
 `include "VX_issue_sched_if.vh"
 `include "VX_commit_sched_if.vh"
 `include "VX_branch_ctl_if.vh"
+`include "VX_warp_ctl_if.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -34,7 +35,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
     input base_dcrs_t       base_dcrs,
 
     // inputsdecode_if
-    VX_warp_ctl_if.slave    warp_ctl_if,
+    // VX_warp_ctl_if.slave    warp_ctl_if,
+    `VX_WARP_CTL_IF_CONSUMER_PORTS(warp_ctl_if),
 
     // VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     `VX_BRANCH_CTL_IF_CONSUMER_PORTS(branch_ctl_if, `NUM_ALU_BLOCKS),
@@ -150,18 +152,18 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
 
         // TMC handling
-        if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
-            active_warps_n[warp_ctl_if.wid]  = (warp_ctl_if.tmc.tmask != 0);
-            thread_masks_n[warp_ctl_if.wid]  = warp_ctl_if.tmc.tmask;
-            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+        if (warp_ctl_if_valid && warp_ctl_if_tmc.valid) begin
+            active_warps_n[warp_ctl_if_wid]  = (warp_ctl_if_tmc.tmask != 0);
+            thread_masks_n[warp_ctl_if_wid]  = warp_ctl_if_tmc.tmask;
+            stalled_warps_n[warp_ctl_if_wid] = 0; // unlock warp
         end
 
         // split handling
-        if (warp_ctl_if.valid && warp_ctl_if.split.valid) begin
-            if (warp_ctl_if.split.is_dvg) begin
-                thread_masks_n[warp_ctl_if.wid] = warp_ctl_if.split.then_tmask;
+        if (warp_ctl_if_valid && warp_ctl_if_split.valid) begin
+            if (warp_ctl_if_split.is_dvg) begin
+                thread_masks_n[warp_ctl_if_wid] = warp_ctl_if_split.then_tmask;
             end
-            stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+            stalled_warps_n[warp_ctl_if_wid] = 0; // unlock warp
         end
 
         // join handling
@@ -176,28 +178,28 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
 
         // barrier handling
-        curr_barrier_mask_p1 = barrier_masks[warp_ctl_if.barrier.id];
-        curr_barrier_mask_p1[warp_ctl_if.wid] = 1;
-        if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
-            if (~warp_ctl_if.barrier.is_noop) begin
-                if (~warp_ctl_if.barrier.is_global
-                 && (barrier_ctrs[warp_ctl_if.barrier.id] == NW_WIDTH'(warp_ctl_if.barrier.size_m1))) begin
-                    barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
-                    barrier_masks_n[warp_ctl_if.barrier.id] = '0; // reset barrier mask
-                    stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
-                    stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+        curr_barrier_mask_p1 = barrier_masks[warp_ctl_if_barrier.id];
+        curr_barrier_mask_p1[warp_ctl_if_wid] = 1;
+        if (warp_ctl_if_valid && warp_ctl_if_barrier.valid) begin
+            if (~warp_ctl_if_barrier.is_noop) begin
+                if (~warp_ctl_if_barrier.is_global
+                 && (barrier_ctrs[warp_ctl_if_barrier.id] == NW_WIDTH'(warp_ctl_if_barrier.size_m1))) begin
+                    barrier_ctrs_n[warp_ctl_if_barrier.id] = '0; // reset barrier counter
+                    barrier_masks_n[warp_ctl_if_barrier.id] = '0; // reset barrier mask
+                    stalled_warps_n &= ~barrier_masks[warp_ctl_if_barrier.id]; // unlock warps
+                    stalled_warps_n[warp_ctl_if_wid] = 0; // unlock warp
                 end else begin
-                    barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + NW_WIDTH'(1);
-                    barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
+                    barrier_ctrs_n[warp_ctl_if_barrier.id] = barrier_ctrs[warp_ctl_if_barrier.id] + NW_WIDTH'(1);
+                    barrier_masks_n[warp_ctl_if_barrier.id] = curr_barrier_mask_p1;
                 end
             end else begin
-                stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
+                stalled_warps_n[warp_ctl_if_wid] = 0; // unlock warp
             end
         end
 
     `ifdef GBAR_ENABLE
         if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_data.id)) begin
-            barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
+            barrier_ctrs_n[warp_ctl_if_barrier.id] = '0; // reset barrier counter
             barrier_masks_n[gbar_bus_if.rsp_data.id] = '0; // reset barrier mask
             stalled_warps_n = '0; // unlock all warps
         end
@@ -257,11 +259,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
             is_single_warp <= (active_warps_cnt == $bits(active_warps_cnt)'(1));
 
             // wspawn handling
-            if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
+            if (warp_ctl_if_valid && warp_ctl_if_wspawn.valid) begin
                 wspawn.valid <= 1;
-                wspawn.wmask <= warp_ctl_if.wspawn.wmask;
-                wspawn.pc    <= warp_ctl_if.wspawn.pc;
-                wspawn_wid   <= warp_ctl_if.wid;
+                wspawn.wmask <= warp_ctl_if_wspawn.wmask;
+                wspawn.pc    <= warp_ctl_if_wspawn.pc;
+                wspawn_wid   <= warp_ctl_if_wid;
             end
             if (wspawn.valid && is_single_warp) begin
                 wspawn.valid <= 0;
@@ -269,13 +271,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
             // global barrier scheduling
         `ifdef GBAR_ENABLE
-            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
-             && warp_ctl_if.barrier.is_global
-             && !warp_ctl_if.barrier.is_noop
+            if (warp_ctl_if_valid && warp_ctl_if_barrier.valid
+             && warp_ctl_if_barrier.is_global
+             && !warp_ctl_if_barrier.is_noop
              && (curr_barrier_mask_p1 == active_warps)) begin
                 gbar_req_valid <= 1;
-                gbar_req_id <= warp_ctl_if.barrier.id;
-                gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if.barrier.size_m1);
+                gbar_req_id <= warp_ctl_if_barrier.id;
+                gbar_req_size_m1 <= NC_WIDTH'(warp_ctl_if_barrier.size_m1);
             end
             if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
                 gbar_req_valid <= 0;
@@ -305,18 +307,18 @@ module VX_schedule import VX_gpu_pkg::*; #(
     ) split_join (
         .clk        (clk),
         .reset      (reset),
-        .valid      (warp_ctl_if.valid),
-        .wid        (warp_ctl_if.wid),
-        .split      (warp_ctl_if.split),
-        .sjoin      (warp_ctl_if.sjoin),
+        .valid      (warp_ctl_if_valid),
+        .wid        (warp_ctl_if_wid),
+        .split      (warp_ctl_if_split),
+        .sjoin      (warp_ctl_if_sjoin),
         .join_valid (join_valid),
         .join_is_dvg(join_is_dvg),
         .join_is_else(join_is_else),
         .join_wid   (join_wid),
         .join_tmask (join_tmask),
         .join_pc    (join_pc),
-        .stack_wid  (warp_ctl_if.dvstack_wid),
-        .stack_ptr  (warp_ctl_if.dvstack_ptr)
+        .stack_wid  (warp_ctl_if_dvstack_wid),
+        .stack_ptr  (warp_ctl_if_dvstack_ptr)
     );
 
     // schedule the next ready warp

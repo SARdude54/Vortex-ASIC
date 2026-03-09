@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_warp_ctl_if.vh"
 
 module VX_wctl_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -24,7 +25,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     VX_execute_if.slave     execute_if,
 
     // Outputs
-    VX_warp_ctl_if.master   warp_ctl_if,
+    // VX_warp_ctl_if.master   warp_ctl_if,
+    `VX_WARP_CTL_IF_PRODUCER_PORTS(warp_ctl_if),
     VX_result_if.master     result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -152,7 +154,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // response
 
-    assign warp_ctl_if.dvstack_wid = execute_if.data.wid;
+    assign warp_ctl_if_dvstack_wid = execute_if.data.wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
 
     VX_elastic_buffer #(
@@ -163,7 +165,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, warp_ctl_if.dvstack_ptr}),
+        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, warp_ctl_if_dvstack_ptr}),
         .data_out  ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.PC,  result_if.data.rd,  result_if.data.wb,  result_if.data.pid,  result_if.data.sop,  result_if.data.eop,  dvstack_ptr}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
@@ -180,7 +182,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .reset    (reset),
         .enable   (1'b1),
         .data_in  ({wctl_valid,        execute_if.data.wid, tmc,             wspawn,             split,             sjoin,             barrier}),
-        .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,      warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
+        .data_out ({warp_ctl_if_valid, warp_ctl_if_wid,      warp_ctl_if_tmc, warp_ctl_if_wspawn, warp_ctl_if_split, warp_ctl_if_sjoin, warp_ctl_if_barrier})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
