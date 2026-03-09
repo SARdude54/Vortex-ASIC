@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_sched_csr_if.vh"
 `include "VX_commit_csr_if.vh"
+`include "VX_branch_ctl_if.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -44,7 +45,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     // flatten: VX_sched_csr_if.slave   sched_csr_if,
     `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
     
-    VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
+    // VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
+    `VX_BRANCH_CTL_IF_PRODUCER_PORTS(branch_ctl_if, `NUM_ALU_BLOCKS),
+
     VX_warp_ctl_if.master   warp_ctl_if,
 
     // commit interface
@@ -63,7 +66,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (reset),
         .dispatch_if    (dispatch_if[EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .branch_ctl_if  (branch_ctl_if)
+        // .branch_ctl_if  (branch_ctl_if)
+        `VX_BRANCH_CTL_IF_PASS_PORTS(branch_ctl_if)
     );
 
     `SCOPE_IO_SWITCH (1);

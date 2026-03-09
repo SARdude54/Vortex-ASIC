@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_branch_ctl_if.vh"
 
 module VX_alu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -24,7 +25,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
+    // VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
+    `VX_BRANCH_CTL_IF_PRODUCER_PORTS(branch_ctl_if, `NUM_ALU_BLOCKS)
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -96,7 +98,11 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .execute_if (pe_execute_if[PE_IDX_INT]),
-            .branch_ctl_if (branch_ctl_if[block_idx]),
+            // .branch_ctl_if (branch_ctl_if[block_idx]),
+            .branch_ctl_if_valid(`VX_BRANCH_CTL_IF_SLICE_VALID(branch_ctl_if, block_idx)),
+            .branch_ctl_if_wid(`VX_BRANCH_CTL_IF_SLICE_WID(branch_ctl_if, block_idx)),
+            .branch_ctl_if_taken(`VX_BRANCH_CTL_IF_SLICE_TAKEN(branch_ctl_if, block_idx)),
+            .branch_ctl_if_dest(`VX_BRANCH_CTL_IF_SLICE_DEST(branch_ctl_if, block_idx)),
             .result_if  (pe_result_if[PE_IDX_INT])
         );
 

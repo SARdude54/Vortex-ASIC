@@ -9,9 +9,10 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// limitations under the License.But I 
 
 `include "VX_define.vh"
+`include "VX_branch_ctl_if.vh"
 
 module VX_alu_int import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -26,7 +27,11 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_result_if.master     result_if,
-    VX_branch_ctl_if.master branch_ctl_if
+    // VX_branch_ctl_if.master branch_ctl_if
+    output wire                branch_ctl_if_valid,
+    output wire [NW_WIDTH-1:0] branch_ctl_if_wid,
+    output wire                branch_ctl_if_taken,
+    output wire [PC_BITS-1:0]  branch_ctl_if_dest
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -272,7 +277,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .reset    (reset),
         .enable   (1'b1),
         .data_in  ({br_enable,           br_wid,            br_taken,            br_dest}),
-        .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
+        .data_out ({branch_ctl_if_valid, branch_ctl_if_wid, branch_ctl_if_taken, branch_ctl_if_dest})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
