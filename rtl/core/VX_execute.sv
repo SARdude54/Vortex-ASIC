@@ -15,6 +15,7 @@
 `include "VX_sched_csr_if.vh"
 `include "VX_commit_csr_if.vh"
 `include "VX_branch_ctl_if.vh"
+`include "VX_warp_ctl_if.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -48,7 +49,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     // VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
     `VX_BRANCH_CTL_IF_PRODUCER_PORTS(branch_ctl_if, `NUM_ALU_BLOCKS),
 
-    VX_warp_ctl_if.master   warp_ctl_if,
+    // VX_warp_ctl_if.master   warp_ctl_if,
+    `VX_WARP_CTL_IF_PRODUCER_PORTS(warp_ctl_if),
 
     // commit interface
     // VX_commit_csr_if.slave  commit_csr_if
@@ -126,7 +128,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         `VX_COMMIT_CSR_IF_PASS_PORTS(commit_csr_if),
         // flatten: .sched_csr_if   (sched_csr_if),
         `VX_SCHED_CSR_IF_PASS_PORTS(sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if)
+        // .warp_ctl_if    (warp_ctl_if)
+        `VX_WARP_CTL_IF_PASS_PORTS(warp_ctl_if)
     );
 
 endmodule

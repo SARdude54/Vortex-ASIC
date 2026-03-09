@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_sched_csr_if.vh"
 `include "VX_commit_csr_if.vh"
+`include "VX_warp_ctl_if.vh"
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -43,7 +44,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_warp_ctl_if.master   warp_ctl_if
+    // VX_warp_ctl_if.master   warp_ctl_if,
+    `VX_WARP_CTL_IF_PRODUCER_PORTS(warp_ctl_if)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
@@ -111,7 +113,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_WCTL]),
-        .warp_ctl_if(warp_ctl_if),
+        // .warp_ctl_if    (warp_ctl_if)
+        `VX_WARP_CTL_IF_PASS_PORTS(warp_ctl_if),
         .result_if  (pe_result_if[PE_IDX_WCTL])
     );
 
