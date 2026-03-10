@@ -15,6 +15,7 @@
 `include "VX_sched_csr_if.vh"
 `include "VX_commit_csr_if.vh"
 `include "VX_warp_ctl_if.vh"
+`include "VX_commit_if.vh"
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -46,7 +47,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
 
     // Outputs
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    // VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    `VX_COMMIT_IF_PRODUCER_PORTS(commit_if, `ISSUE_WIDTH),
     // VX_warp_ctl_if.master   warp_ctl_if,
     `VX_WARP_CTL_IF_PRODUCER_PORTS(warp_ctl_if)
 );
@@ -159,7 +161,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .result_if (per_block_result_if),
-        .commit_if (commit_if)
+        // .commit_if (commit_if)
+        `VX_COMMIT_IF_PASS_PORTS(commit_if, commit_if)
     );
 
 endmodule

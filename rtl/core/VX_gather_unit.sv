@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_commit_if.vh"
 
 module VX_gather_unit import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
@@ -25,7 +26,8 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     VX_result_if.slave  result_if [BLOCK_SIZE],
 
     // outputs
-    VX_commit_if.master commit_if [`ISSUE_WIDTH]
+    // VX_commit_if.master commit_if [`ISSUE_WIDTH]
+    `VX_COMMIT_IF_PRODUCER_PORTS(commit_if, `ISSUE_WIDTH)
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
@@ -125,8 +127,8 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             assign commit_data_w  = result_tmp_if.data.data;
         end
 
-        assign commit_if[i].valid = result_tmp_if.valid;
-        assign commit_if[i].data = {
+        assign commit_if_valid[i] = result_tmp_if.valid;
+        assign commit_if_data[i] = {
             result_tmp_if.data.uuid,
             result_tmp_if.data.wid,
             commit_sid_w,
@@ -138,7 +140,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             result_tmp_if.data.sop,
             result_tmp_if.data.eop
         };
-        assign result_tmp_if.ready = commit_if[i].ready;
+        assign result_tmp_if.ready = commit_if_ready[i];
     end
 
 endmodule
