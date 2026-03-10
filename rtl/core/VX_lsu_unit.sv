@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_commit_if.vh"
 
 module VX_lsu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -28,7 +29,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     output logic [`ISSUE_WIDTH-1:0] dispatch_if_ready,
 
     // Outputs
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    // VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    `VX_COMMIT_IF_PRODUCER_PORTS(commit_if, `ISSUE_WIDTH),
     VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS]
 );
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
@@ -79,7 +81,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .result_if (per_block_result_if),
-        .commit_if (commit_if)
+        // .commit_if (commit_if)
+        `VX_COMMIT_IF_PASS_PORTS(commit_if, commit_if)
     );
 
 endmodule

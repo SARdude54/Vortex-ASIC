@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_branch_ctl_if.vh"
+`include "VX_commit_if.vh"
 
 module VX_alu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -27,7 +28,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     output logic [`ISSUE_WIDTH-1:0] dispatch_if_ready,
 
     // Outputs
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    // VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    `VX_COMMIT_IF_PRODUCER_PORTS(commit_if, `ISSUE_WIDTH),
     // VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
     `VX_BRANCH_CTL_IF_PRODUCER_PORTS(branch_ctl_if, `NUM_ALU_BLOCKS)
 );
@@ -133,7 +135,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .result_if (per_block_result_if),
-        .commit_if (commit_if)
+        // .commit_if (commit_if)
+        `VX_COMMIT_IF_PASS_PORTS(commit_if, commit_if)
     );
 
 endmodule
