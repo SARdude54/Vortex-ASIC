@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_writeback_if.vh"
 
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -24,7 +25,10 @@ module VX_operands import VX_gpu_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] perf_stalls,
 `endif
 
-    VX_writeback_if.slave   writeback_if,
+    // VX_writeback_if.slave   writeback_if,
+    input wire writeback_if_valid,
+    input writeback_t writeback_if_data,
+
     VX_scoreboard_if.slave  scoreboard_if,
     VX_operands_if.master   operands_if
 );
@@ -45,7 +49,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [NUM_OPCS_W-1:0] sb_opc, wb_opc;
     if (`NUM_OPCS != 1) begin : g_wis_opc
         assign sb_opc = scoreboard_if.data.wis[NUM_OPCS_W-1:0];
-        assign wb_opc = writeback_if.data.wis[NUM_OPCS_W-1:0];
+        assign wb_opc = writeback_if_data.wis[NUM_OPCS_W-1:0];
     end else begin : g_wis_opc
         assign sb_opc = 0;
         assign wb_opc = 0;
@@ -63,8 +67,11 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         // select writeback interface
         VX_writeback_if opc_writeback_if();
-        assign opc_writeback_if.valid = writeback_if.valid && (wb_opc == i);
-        assign opc_writeback_if.data  = writeback_if.data;
+        logic       opc_writeback_if_valid;
+        writeback_t opc_writeback_if_data;
+
+        assign opc_writeback_if_valid = writeback_if_valid && (wb_opc == i);
+        assign opc_writeback_if_data  = writeback_if_data;
 
         VX_opc_unit #(
             .INSTANCE_ID  (`SFORMATF(("%s-collector%0d", INSTANCE_ID, i))),
@@ -76,7 +83,8 @@ module VX_operands import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .perf_stalls  (per_opc_perf_stalls[i]),
         `endif
-            .writeback_if (opc_writeback_if),
+            // .writeback_if (opc_writeback_if),
+            `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, opc_writeback_if),
             .scoreboard_if(opc_scoreboard_if),
             .operands_if  (per_opc_operands_if[i])
         );

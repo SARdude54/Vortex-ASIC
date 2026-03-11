@@ -15,6 +15,7 @@
 `include "VX_commit_sched_if.vh"
 `include "VX_commit_csr_if.vh"
 `include "VX_commit_if.vh"
+`include "VX_writeback_if.vh"
 
 module VX_commit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -27,7 +28,9 @@ module VX_commit import VX_gpu_pkg::*; #(
     `VX_COMMIT_IF_CONSUMER_PORTS(commit_if, NUM_EX_UNITS * `ISSUE_WIDTH),
 
     // outputs
-    VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
+    // VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
+    `VX_WRITEBACK_IF_PRODUCER_PORTS(writeback_if, `ISSUE_WIDTH),
+
     // VX_commit_csr_if.master commit_csr_if,
     `VX_COMMIT_CSR_IF_PRODUCER_PORTS(commit_csr_if),
     // VX_commit_sched_if.master commit_sched_if
@@ -168,16 +171,16 @@ module VX_commit import VX_gpu_pkg::*; #(
     // Writeback
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback
-        assign writeback_if[i].valid     = commit_arb_if_valid[i] && commit_arb_if_data[i].wb;
-        assign writeback_if[i].data.uuid = commit_arb_if_data[i].uuid;
-        assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if_data[i].wid);
-        assign writeback_if[i].data.sid  = commit_arb_if_data[i].sid;
-        assign writeback_if[i].data.PC   = commit_arb_if_data[i].PC;
-        assign writeback_if[i].data.tmask= commit_arb_if_data[i].tmask;
-        assign writeback_if[i].data.rd   = commit_arb_if_data[i].rd;
-        assign writeback_if[i].data.data = commit_arb_if_data[i].data;
-        assign writeback_if[i].data.sop  = commit_arb_if_data[i].sop;
-        assign writeback_if[i].data.eop  = commit_arb_if_data[i].eop;
+        assign writeback_if_valid[i]     = commit_arb_if_valid[i] && commit_arb_if_data[i].wb;
+        assign writeback_if_data[i].uuid = commit_arb_if_data[i].uuid;
+        assign writeback_if_data[i].wis  = wid_to_wis(commit_arb_if_data[i].wid);
+        assign writeback_if_data[i].sid  = commit_arb_if_data[i].sid;
+        assign writeback_if_data[i].PC   = commit_arb_if_data[i].PC;
+        assign writeback_if_data[i].tmask= commit_arb_if_data[i].tmask;
+        assign writeback_if_data[i].rd   = commit_arb_if_data[i].rd;
+        assign writeback_if_data[i].data = commit_arb_if_data[i].data;
+        assign writeback_if_data[i].sop  = commit_arb_if_data[i].sop;
+        assign writeback_if_data[i].eop  = commit_arb_if_data[i].eop;
         assign commit_arb_if_ready[i]    = 1;
     end
 

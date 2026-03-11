@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_writeback_if.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -26,13 +27,16 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     output reg [NUM_SFU_UNITS-1:0][PERF_CTR_BITS-1:0] perf_sfu_uses,
 `endif
 
-    VX_writeback_if.slave   writeback_if,
+    // VX_writeback_if.slave   writeback_if,
+    input wire writeback_if_valid,
+    input writeback_t writeback_if_data,
+
     VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (ISSUE_ID)
-    `UNUSED_VAR (writeback_if.data.sop)
+    `UNUSED_VAR (writeback_if_data.sop)
 
     localparam NUM_OPDS = NUM_SRC_OPDS + 1;
     localparam IN_DATAW = $bits(ibuffer_t);
@@ -126,9 +130,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
         wire staging_fire = staging_if[w].valid && staging_if[w].ready;
 
-        wire writeback_fire = writeback_if.valid
-                           && (writeback_if.data.wis == ISSUE_WIS_W'(w))
-                           && writeback_if.data.eop;
+        wire writeback_fire = writeback_if_valid
+                           && (writeback_if_data.wis == ISSUE_WIS_W'(w))
+                           && writeback_if_data.eop;
 
         wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
         assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
@@ -149,7 +153,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         always @(*) begin
             inuse_regs_n = inuse_regs;
             if (writeback_fire) begin
-                inuse_regs_n[writeback_if.data.rd] = 0; // release rd
+                inuse_regs_n[writeback_if_data.rd] = 0; // release rd
             end
             if (staging_fire && staging_if[w].data.wb) begin
                 inuse_regs_n |= stg_opd_mask[0]; // reserve rd
@@ -238,9 +242,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
                 operands_busy, staging_if[w].data.uuid))
 
-        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if.data.rd] != 0,
+        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if_data.rd] != 0,
             ("%t: *** %s invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
-                $time, INSTANCE_ID, w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
+                $time, INSTANCE_ID, w, to_fullPC(writeback_if_data.PC), writeback_if_data.tmask, writeback_if_data.rd, writeback_if_data.uuid))
     `endif
 
     end

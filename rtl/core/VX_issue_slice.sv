@@ -15,6 +15,7 @@
 `include "VX_decode_if.vh"
 `include "VX_issue_sched_if.vh"
 `include "VX_dispatch_if.vh"
+`include "VX_writeback_if.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -31,7 +32,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
     // VX_decode_if.slave      decode_if,
     `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
-    VX_writeback_if.slave   writeback_if,
+    // VX_writeback_if.slave   writeback_if,
+    input wire writeback_if_valid,
+    input writeback_t writeback_if_data,
     // VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
     `VX_DISPATCH_IF_PRODUCER_PORTS(dispatch_if, NUM_EX_UNITS),
 
@@ -69,7 +72,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .perf_units_uses(issue_perf.units_uses),
         .perf_sfu_uses  (issue_perf.sfu_uses),
     `endif
-        .writeback_if   (writeback_if),
+        // .writeback_if   (writeback_if),
+        `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, writeback_if),
         .ibuffer_if     (ibuffer_if),
         .scoreboard_if  (scoreboard_if)
     );
@@ -83,7 +87,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
      `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.opd_stalls),
      `endif
-        .writeback_if   (writeback_if),
+        // .writeback_if   (writeback_if),
+        `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, writeback_if),
         .scoreboard_if  (scoreboard_if),
         .operands_if    (operands_if)
     );
@@ -125,7 +130,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         }, {
             decode_fire,
             operands_fire,
-            writeback_if.valid // ack-free
+            writeback_if_valid // ack-free
         }, {
             decode_if_data.uuid,
             decode_if_data.wid,
@@ -149,12 +154,12 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             operands_if.data.rs1_data[0],
             operands_if.data.rs2_data[0],
             operands_if.data.rs3_data[0],
-            writeback_if.data.uuid,
-            writeback_if.data.wis,
-            writeback_if.data.tmask,
-            writeback_if.data.rd,
-            writeback_if.data.data,
-            writeback_if.data.eop
+            writeback_if_data.uuid,
+            writeback_if_data.wis,
+            writeback_if_data.tmask,
+            writeback_if_data.rd,
+            writeback_if_data.data,
+            writeback_if_data.eop
         },
         reset_negedge, 1'b0, 4096
     );
@@ -170,7 +175,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .probe0 ({decode_if_valid, decode_if_data, decode_if_ready}),
         .probe1 ({scoreboard_if.valid, scoreboard_if.data, scoreboard_if.ready}),
         .probe2 ({operands_if.valid, operands_if.data, operands_if.ready}),
-        .probe3 ({writeback_if.valid, writeback_if.data})
+        .probe3 ({writeback_if_valid, writeback_if_data})
     );
 `endif
 `endif
