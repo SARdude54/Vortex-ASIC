@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_writeback_if.vh"
+`include "VX_ibuffer_if.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -31,7 +32,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     input wire writeback_if_valid,
     input writeback_t writeback_if_data,
 
-    VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
+    // VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
+    `VX_IBUFFER_IF_CONSUMER_PORTS_N(ibuffer_if, PER_ISSUE_WARPS),
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -41,7 +43,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam NUM_OPDS = NUM_SRC_OPDS + 1;
     localparam IN_DATAW = $bits(ibuffer_t);
 
-    VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
+    // VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
+    `VX_IBUFFER_IF_SIGNALS_N(staging_if, PER_ISSUE_WARPS);
     wire [PER_ISSUE_WARPS-1:0] operands_ready;
 
 `ifdef PERF_ENABLE
@@ -74,7 +77,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in
-        assign stg_valid_in[w] = staging_if[w].valid;
+        assign stg_valid_in[w] = `VX_IBUFFER_IF_SLICE_VALID(staging_if, w); 
     end
 
     wire perf_stall_per_cycle = (|stg_valid_in) && ~(|(stg_valid_in & operands_ready));
@@ -114,12 +117,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         ) stanging_buf (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (ibuffer_if[w].valid),
-            .data_in  (ibuffer_if[w].data),
-            .ready_in (ibuffer_if[w].ready),
-            .valid_out(staging_if[w].valid),
-            .data_out (staging_if[w].data),
-            .ready_out(staging_if[w].ready)
+            .valid_in (`VX_IBUFFER_IF_SLICE_VALID(ibuffer_if, w)),
+            .data_in  (`VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w)),
+            .ready_in (`VX_IBUFFER_IF_SLICE_READY(ibuffer_if, w)),
+            .valid_out(`VX_IBUFFER_IF_SLICE_VALID(staging_if, w)),
+            .data_out (`VX_IBUFFER_IF_SLICE_DATA(staging_if, w)),
+            .ready_out(`VX_IBUFFER_IF_SLICE_READY(staging_if, w))
         );
     end
 
@@ -127,19 +130,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         reg [NUM_REGS-1:0] inuse_regs, inuse_regs_n;
         wire [NUM_OPDS-1:0] operands_busy;
 
-        wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
-        wire staging_fire = staging_if[w].valid && staging_if[w].ready;
+        wire ibuffer_fire = `VX_IBUFFER_IF_SLICE_VALID(ibuffer_if, w) && `VX_IBUFFER_IF_SLICE_READY(ibuffer_if, w);
+        wire staging_fire = `VX_IBUFFER_IF_SLICE_VALID(staging_if, w) && `VX_IBUFFER_IF_SLICE_READY(staging_if, w);
 
         wire writeback_fire = writeback_if_valid
                            && (writeback_if_data.wis == ISSUE_WIS_W'(w))
                            && writeback_if_data.eop;
 
         wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
-        assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
-        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
+        assign ibf_opds = {`VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w).rs3, `VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w).rs2, `VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w).rs1, `VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w).rd};
+        assign stg_opds = {`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).rs3, `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).rs2, `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).rs1, `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).rd};
 
-        wire [NUM_OPDS-1:0] ibf_used_rs = {ibuffer_if[w].data.used_rs, ibuffer_if[w].data.wb};
-        wire [NUM_OPDS-1:0] stg_used_rs = {staging_if[w].data.used_rs, staging_if[w].data.wb};
+        wire [NUM_OPDS-1:0] ibf_used_rs = {`VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w).used_rs, `VX_IBUFFER_IF_SLICE_DATA(ibuffer_if, w).wb};
+        wire [NUM_OPDS-1:0] stg_used_rs = {`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).used_rs, `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).wb};
 
         wire [NUM_OPDS-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_opd_mask, stg_opd_mask;
 
@@ -155,7 +158,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             if (writeback_fire) begin
                 inuse_regs_n[writeback_if_data.rd] = 0; // release rd
             end
-            if (staging_fire && staging_if[w].data.wb) begin
+            if (staging_fire && `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).wb) begin
                 inuse_regs_n |= stg_opd_mask[0]; // reserve rd
             end
         end
@@ -199,7 +202,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             perf_inuse_units_per_cycle[w] = '0;
             perf_inuse_sfu_per_cycle[w] = '0;
             for (integer i = 0; i < NUM_OPDS; ++i) begin
-                if (staging_if[w].valid && operands_busy[i]) begin
+                if (VX_IBUFFER_IF_SLICE_VALID(staging_if, w) && operands_busy[i]) begin
                     perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i]]] = 1;
                     if (inuse_units[stg_opds[i]] == EX_SFU) begin
                         perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i]]] = 1;
@@ -208,10 +211,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
         always @(posedge clk) begin
-            if (staging_fire && staging_if[w].data.wb) begin
-                inuse_units[staging_if[w].data.rd] <= staging_if[w].data.ex_type;
-                if (staging_if[w].data.ex_type == EX_SFU) begin
-                    inuse_sfu[staging_if[w].data.rd] <= op_to_sfu_type(staging_if[w].data.op_type);
+            if (staging_fire && `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).wb) begin
+                inuse_units[`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).rd] <= `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).ex_type;
+                if (`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).ex_type == EX_SFU) begin
+                    inuse_sfu[`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).rd] <= op_to_sfu_type(`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).op_type);
                 end
             end
         end
@@ -224,10 +227,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             if (reset) begin
                 timeout_ctr <= '0;
             end else begin
-                if (staging_if[w].valid && ~staging_if[w].ready) begin
+                if (`VX_IBUFFER_IF_SLICE_VALID(staging_if, w) && ~`VX_IBUFFER_IF_SLICE_DATA(staging_if, w)) begin
                 `ifdef DBG_TRACE_PIPELINE
                     `TRACE(4, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
-                        $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
+                        $time, INSTANCE_ID, w, to_fullPC(`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).data.PC), `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).tmask, timeout_ctr,
                         operands_busy, staging_if[w].data.uuid))
                 `endif
                     timeout_ctr <= timeout_ctr + 1;
@@ -239,8 +242,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         `RUNTIME_ASSERT((timeout_ctr < STALL_TIMEOUT),
             ("%t: *** %s timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
-                $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
-                operands_busy, staging_if[w].data.uuid))
+                $time, INSTANCE_ID, w, to_fullPC(`VX_IBUFFER_IF_SLICE_DATA(staging_if, w).PC), `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).tmask, timeout_ctr,
+                operands_busy, `VX_IBUFFER_IF_SLICE_DATA(staging_if, w).uuid))
 
         `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if_data.rd] != 0,
             ("%t: *** %s invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
@@ -254,9 +257,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
-        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
-        assign arb_data_in[w] = staging_if[w].data;
-        assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
+        assign arb_valid_in[w] = `VX_IBUFFER_IF_SLICE_VALID(staging_if, w) && operands_ready[w];
+        assign arb_data_in[w] = `VX_IBUFFER_IF_SLICE_DATA(staging_if, w);
+        assign `VX_IBUFFER_IF_SLICE_READY(staging_if, w) = arb_ready_in[w] && operands_ready[w];
     end
 
     VX_stream_arb #(

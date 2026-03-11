@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_decode_if.vh"
+`include "VX_ibuffer_if.vh"
 
 module VX_ibuffer import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -30,7 +31,8 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
 
     // outputs
-    VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
+    // VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
+    `VX_IBUFFER_IF_PRODUCER_PORTS_N(ibuffer_if, PER_ISSUE_WARPS)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (ISSUE_ID)
@@ -43,7 +45,9 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     assign decode_if_ready = ibuf_ready_in[decode_wis];
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_instr_bufs
-        VX_ibuffer_if uop_sequencer_if();
+        // VX_ibuffer_if uop_sequencer_if();
+        `VX_IBUFFER_IF_SIGNALS(uop_sequencer_if);
+
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
             .SIZE    (`IBUF_SIZE),
@@ -67,19 +71,21 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if_data.rs3
             }),
             .ready_in (ibuf_ready_in[w]),
-            .valid_out(uop_sequencer_if.valid),
-            .data_out (uop_sequencer_if.data),
-            .ready_out(uop_sequencer_if.ready)
+            .valid_out(uop_sequencer_if_valid),
+            .data_out (uop_sequencer_if_data),
+            .ready_out(uop_sequencer_if_ready)
         );
     `ifndef L1_ENABLE
-        assign decode_if_ibuf_pop[w] = uop_sequencer_if.valid && uop_sequencer_if.ready;
+        assign decode_if_ibuf_pop[w] = uop_sequencer_if_valid && uop_sequencer_if_ready;
     `endif
 
         VX_uop_sequencer uop_sequencer (
             .clk       (clk),
             .reset     (reset),
-            .input_if  (uop_sequencer_if),
-            .output_if (ibuffer_if[w])
+            // .input_if  (uop_sequencer_if),
+            `VX_IBUFFER_IF_PASS_PORTS(input_if, uop_sequencer_if),
+            // .output_if (ibuffer_if[w])
+            `VX_IBUFFER_IF_PASS_PORTS_I(output_if, ibuffer_if, w)
         );
     end
 
