@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_writeback_if.vh"
 `include "VX_scoreboard_if.vh"
+`include "VX_operands_if.vh"
 
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -33,7 +34,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     // VX_scoreboard_if.slave  scoreboard_if,
     `VX_SCOREBOARD_IF_CONSUMER_PORTS(scoreboard_if),
 
-    VX_operands_if.master   operands_if
+    // VX_operands_if.master   operands_if
+    `VX_OPERANDS_IF_PRODUCER_PORTS(operands_if)
 );
     `UNUSED_SPARAM (ISSUE_ID)
 
@@ -47,7 +49,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [`NUM_OPCS-1:0][PERF_CTR_BITS-1:0] per_opc_perf_stalls;
 `endif
 
-    VX_operands_if per_opc_operands_if[`NUM_OPCS]();
+    // VX_operands_if per_opc_operands_if[`NUM_OPCS]();
+    `VX_OPERANDS_IF_SIGNALS_N(per_opc_operands_if, `NUM_OPCS);
 
     wire [NUM_OPCS_W-1:0] sb_opc, wb_opc;
     if (`NUM_OPCS != 1) begin : g_wis_opc
@@ -91,7 +94,8 @@ module VX_operands import VX_gpu_pkg::*; #(
             `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, opc_writeback_if),
             // .scoreboard_if(opc_scoreboard_if),
             `VX_SCOREBOARD_IF_PASS_PORTS(scoreboard_if, opc_scoreboard_if),
-            .operands_if  (per_opc_operands_if[i])
+            // .operands_if  (per_opc_operands_if[i])
+            `VX_OPERANDS_IF_PASS_PORTS_I(operands_if, per_opc_operands_if, i)
         );
     end
 
@@ -110,9 +114,9 @@ module VX_operands import VX_gpu_pkg::*; #(
         .valid_in  (per_opc_operands_valid),
         .data_in   (per_opc_operands_data),
         .ready_in  (per_opc_operands_ready),
-        .valid_out (operands_if.valid),
-        .data_out  (operands_if.data),
-        .ready_out (operands_if.ready),
+        .valid_out (operands_if_valid),
+        .data_out  (operands_if_data),
+        .ready_out (operands_if_ready),
         `UNUSED_PIN (sel_out)
     );
 
