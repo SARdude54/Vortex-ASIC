@@ -15,6 +15,7 @@
 `include "VX_decode_if.vh"
 `include "VX_issue_sched_if.vh"
 `include "VX_dispatch_if.vh"
+`include "VX_writeback_if.vh"
 
 module VX_issue import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -30,7 +31,10 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     //flatten: VX_decode_if.slave      decode_if,
     `VX_DECODE_IF_CONSUMER_PORTS(decode_if),
-    VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
+
+    // VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
+    `VX_WRITEBACK_IF_CONSUMER_PORTS(writeback_if, `ISSUE_WIDTH),
+
     // VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
     `VX_DISPATCH_IF_PRODUCER_PORTS(dispatch_if, NUM_EX_UNITS * `ISSUE_WIDTH),
     
@@ -87,7 +91,9 @@ module VX_issue import VX_gpu_pkg::*; #(
         `endif
             // flatten: .decode_if    (slice_decode_if),
             `VX_DECODE_IF_PASS_PORTS(decode_if, slice_decode_if),
-            .writeback_if (writeback_if[issue_id]),
+            // .writeback_if (writeback_if[issue_id]),
+            .writeback_if_valid(`VX_WRITEBACK_IF_SLICE_VALID(writeback_if, issue_id)),
+            .writeback_if_data(`VX_WRITEBACK_IF_SLICE_DATA(writeback_if, issue_id)),
             // .dispatch_if  (per_issue_dispatch_if),
             `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, per_issue_dispatch_if),
             // flatten passing ports and multidimensional .issue_sched_if(issue_sched_if[issue_id])

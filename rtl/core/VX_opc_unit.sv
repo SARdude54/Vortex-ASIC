@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_writeback_if.vh"
 
 // reset all GPRs in debug mode
 `ifdef SIMULATION
@@ -32,7 +33,9 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] perf_stalls,
 `endif
 
-    VX_writeback_if.slave   writeback_if,
+    // VX_writeback_if.slave   writeback_if,
+    input wire writeback_if_valid,
+    input writeback_t writeback_if_data,
     VX_scoreboard_if.slave  scoreboard_if,
     VX_operands_if.master   operands_if
 );
@@ -236,33 +239,33 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [BANK_ADDR_WIDTH-1:0] gpr_wr_addr;
     if (SIMD_COUNT != 1) begin : g_gpr_wr_addr_sid
         wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-        `CONCAT(tmp, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_BITS],
-              writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
-        assign gpr_wr_addr = {writeback_if.data.sid, tmp};
+        `CONCAT(tmp, writeback_if_data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_BITS],
+              writeback_if_data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
+        assign gpr_wr_addr = {writeback_if_data.sid, tmp};
     end else begin : g_gpr_wr_addr
-        `CONCAT(gpr_wr_addr, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_BITS],
-              writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
+        `CONCAT(gpr_wr_addr, writeback_if_data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_BITS],
+              writeback_if_data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
     end
 
     wire [BANK_SEL_WIDTH-1:0] gpr_wr_bank_idx;
     if (NUM_BANKS != 1) begin : g_gpr_wr_bank_idx_bn
-        assign gpr_wr_bank_idx = writeback_if.data.rd[BANK_SEL_BITS-1:0];
+        assign gpr_wr_bank_idx = writeback_if_data.rd[BANK_SEL_BITS-1:0];
     end else begin : g_gpr_wr_bank_idx_b1
         assign gpr_wr_bank_idx = '0;
     end
 
     wire [BANK_DATA_SIZE-1:0] gpr_wr_byteen;
     for (genvar i = 0; i < `SIMD_WIDTH; ++i) begin : g_gpr_wr_byteen
-        assign gpr_wr_byteen[i*XLENB+:XLENB] = {XLENB{writeback_if.data.tmask[i]}};
+        assign gpr_wr_byteen[i*XLENB+:XLENB] = {XLENB{writeback_if_data.tmask[i]}};
     end
 
     // GPR banks
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_gpr_rams
         wire gpr_wr_enabled;
         if (BANK_SEL_BITS != 0) begin : g_gpr_wr_enabled_bn
-            assign gpr_wr_enabled = writeback_if.valid && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
+            assign gpr_wr_enabled = writeback_if_valid && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
         end else begin : g_gpr_wr_enabled_b1
-            assign gpr_wr_enabled = writeback_if.valid;
+            assign gpr_wr_enabled = writeback_if_valid;
         end
 
         wire [BANK_ADDR_WIDTH-1:0] gpr_rd_addr;
@@ -292,7 +295,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             .wren  (gpr_wr_byteen),
             .write (gpr_wr_enabled),
             .waddr (gpr_wr_addr),
-            .wdata (writeback_if.data.data),
+            .wdata (writeback_if_data.data),
             .raddr (gpr_rd_addr),
             .rdata (gpr_rd_data_st2[b])
         );
