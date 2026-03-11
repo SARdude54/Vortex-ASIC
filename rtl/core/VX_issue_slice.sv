@@ -18,6 +18,7 @@
 `include "VX_writeback_if.vh"
 `include "VX_ibuffer_if.vh"
 `include "VX_scoreboard_if.vh"
+`include "VX_operands_if.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -51,7 +52,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     // VX_scoreboard_if scoreboard_if();
     `VX_SCOREBOARD_IF_SIGNALS(scoreboard_if);
 
-    VX_operands_if operands_if();
+    // VX_operands_if operands_if();
+    `VX_OPERANDS_IF_SIGNALS(operands_if);
 
     VX_ibuffer #(
         .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
@@ -101,7 +103,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         // .scoreboard_if  (scoreboard_if)
         `VX_SCOREBOARD_IF_PASS_PORTS(scoreboard_if, scoreboard_if),
 
-        .operands_if    (operands_if)
+        // .operands_if    (operands_if)
+        `VX_OPERANDS_IF_PASS_PORTS(operands_if, operands_if)
     );
 
     VX_dispatch #(
@@ -113,14 +116,16 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         `UNUSED_PIN     (perf_stalls),
     `endif
-        .operands_if    (operands_if),
+        // .operands_if    (operands_if),
+        `VX_OPERANDS_IF_PASS_PORTS(operands_if, operands_if),
+
         // .dispatch_if    (dispatch_if)
         `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, dispatch_if)
     );
 
     // notify scheduler
-    assign issue_sched_if_valid = operands_if.valid && operands_if.ready && operands_if.data.sop;
-    assign issue_sched_if_wis = operands_if.data.wis;
+    assign issue_sched_if_valid = operands_if_valid && operands_if_ready && operands_if_data.sop;
+    assign issue_sched_if_wis = operands_if_data.wis;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE

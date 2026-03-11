@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_writeback_if.vh"
 `include "VX_scoreboard_if.vh"
+`include "VX_operands_if.vh"
 
 // reset all GPRs in debug mode
 `ifdef SIMULATION
@@ -39,7 +40,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     input writeback_t writeback_if_data,
     // VX_scoreboard_if.slave  scoreboard_if,
     `VX_SCOREBOARD_IF_CONSUMER_PORTS(scoreboard_if),
-    VX_operands_if.master   operands_if
+    // VX_operands_if.master   operands_if
+    `VX_OPERANDS_IF_PRODUCER_PORTS(operands_if)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -317,24 +319,24 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
                     opd_buffer_n_st2, // operand data
                     pipe_mdata_st2[1:0]}), // sop/eop
         .data_out ({
-            operands_if.data.uuid,
-            operands_if.data.wis,
-            operands_if.data.sid,
-            operands_if.data.tmask,
-            operands_if.data.PC,
-            operands_if.data.wb,
-            operands_if.data.ex_type,
-            operands_if.data.op_type,
-            operands_if.data.op_args,
-            operands_if.data.rd,
-            operands_if.data.rs3_data,
-            operands_if.data.rs2_data,
-            operands_if.data.rs1_data,
-            operands_if.data.sop,
-            operands_if.data.eop
+            operands_if_data.uuid,
+            operands_if_data.wis,
+            operands_if_data.sid,
+            operands_if_data.tmask,
+            operands_if_data.PC,
+            operands_if_data.wb,
+            operands_if_data.ex_type,
+            operands_if_data.op_type,
+            operands_if_data.op_args,
+            operands_if_data.rd,
+            operands_if_data.rs3_data,
+            operands_if_data.rs2_data,
+            operands_if_data.rs1_data,
+            operands_if_data.sop,
+            operands_if_data.eop
         }),
-        .valid_out(operands_if.valid),
-        .ready_out(operands_if.ready)
+        .valid_out(operands_if_valid),
+        .ready_out(operands_if_ready)
     );
 
 `ifdef PERF_ENABLE

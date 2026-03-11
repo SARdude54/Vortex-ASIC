@@ -36,15 +36,15 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define ITF_TO_AOS(prefix, itf, count, dataw) \
+`define ITF_TO_AOS(prefix, itf_pref, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
     wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
     wire [(count)-1:0] prefix``_ready; \
     /* verilator lint_off GENUNNAMED */ \
     for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].valid; \
-        assign prefix``_data[i] = itf[i].data; \
-        assign itf[i].ready = prefix``_ready[i]; \
+        assign prefix``_valid[i] = itf_pref``_valid[i]; \
+        assign prefix``_data[i] = itf_pref``_data[i]; \
+        assign itf_pref``_ready[i] = prefix``_ready[i]; \
     end \
     /* verilator lint_on GENUNNAMED */
 
