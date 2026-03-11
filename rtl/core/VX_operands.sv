@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_writeback_if.vh"
+`include "VX_scoreboard_if.vh"
 
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -29,7 +30,9 @@ module VX_operands import VX_gpu_pkg::*; #(
     input wire writeback_if_valid,
     input writeback_t writeback_if_data,
 
-    VX_scoreboard_if.slave  scoreboard_if,
+    // VX_scoreboard_if.slave  scoreboard_if,
+    `VX_SCOREBOARD_IF_CONSUMER_PORTS(scoreboard_if),
+
     VX_operands_if.master   operands_if
 );
     `UNUSED_SPARAM (ISSUE_ID)
@@ -48,7 +51,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire [NUM_OPCS_W-1:0] sb_opc, wb_opc;
     if (`NUM_OPCS != 1) begin : g_wis_opc
-        assign sb_opc = scoreboard_if.data.wis[NUM_OPCS_W-1:0];
+        assign sb_opc = scoreboard_if_data.wis[NUM_OPCS_W-1:0];
         assign wb_opc = writeback_if_data.wis[NUM_OPCS_W-1:0];
     end else begin : g_wis_opc
         assign sb_opc = 0;
@@ -56,14 +59,15 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
     wire [`NUM_OPCS-1:0] scoreboard_ready_in;
-    assign scoreboard_if.ready = scoreboard_ready_in[sb_opc];
+    assign scoreboard_if_ready = scoreboard_ready_in[sb_opc];
 
     for (genvar i = 0; i < `NUM_OPCS; i++) begin : g_collectors
         // select scoreboard interface
-        VX_scoreboard_if opc_scoreboard_if();
-        assign opc_scoreboard_if.valid = scoreboard_if.valid && (sb_opc == i);
-        assign opc_scoreboard_if.data  = scoreboard_if.data;
-        assign scoreboard_ready_in[i]  = opc_scoreboard_if.ready;
+        // VX_scoreboard_if opc_scoreboard_if();
+        `VX_SCOREBOARD_IF_SIGNALS(opc_scoreboard_if);
+        assign opc_scoreboard_if_valid = scoreboard_if_valid && (sb_opc == i);
+        assign opc_scoreboard_if_data  = scoreboard_if_data;
+        assign scoreboard_ready_in[i]  = opc_scoreboard_if_ready;
 
         // select writeback interface
         VX_writeback_if opc_writeback_if();
@@ -85,7 +89,8 @@ module VX_operands import VX_gpu_pkg::*; #(
         `endif
             // .writeback_if (opc_writeback_if),
             `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, opc_writeback_if),
-            .scoreboard_if(opc_scoreboard_if),
+            // .scoreboard_if(opc_scoreboard_if),
+            `VX_SCOREBOARD_IF_PASS_PORTS(scoreboard_if, opc_scoreboard_if),
             .operands_if  (per_opc_operands_if[i])
         );
     end
