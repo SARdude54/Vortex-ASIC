@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_writeback_if.vh"
+`include "VX_scoreboard_if.vh"
 
 // reset all GPRs in debug mode
 `ifdef SIMULATION
@@ -36,7 +37,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     // VX_writeback_if.slave   writeback_if,
     input wire writeback_if_valid,
     input writeback_t writeback_if_data,
-    VX_scoreboard_if.slave  scoreboard_if,
+    // VX_scoreboard_if.slave  scoreboard_if,
+    `VX_SCOREBOARD_IF_CONSUMER_PORTS(scoreboard_if),
     VX_operands_if.master   operands_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -87,7 +89,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire has_collision_st1;
 
     wire [NUM_SRC_OPDS-1:0][NUM_REGS_BITS-1:0] src_regs;
-    assign src_regs = {scoreboard_if.data.rs3, scoreboard_if.data.rs2, scoreboard_if.data.rs1};
+    assign src_regs = {scoreboard_if_data.rs3, scoreboard_if_data.rs2, scoreboard_if_data.rs1};
 
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_gpr_rd_reg
         assign req_addr_in[i] = src_regs[i][NUM_REGS_BITS-1 -: REG_REM_BITS];
@@ -102,10 +104,10 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_src_valid
-        assign src_valid[i] = scoreboard_if.data.used_rs[i] && (src_regs[i] != 0) && ~opd_fetched_st1[i];
+        assign src_valid[i] = scoreboard_if_data.used_rs[i] && (src_regs[i] != 0) && ~opd_fetched_st1[i];
     end
 
-    assign req_valid_in = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
+    assign req_valid_in = {NUM_SRC_OPDS{scoreboard_if_valid}} & src_valid;
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_OPDS),
@@ -149,8 +151,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     ) simd_iter (
         .clk     (clk),
         .reset   (reset),
-        .valid_in(scoreboard_if.valid),
-        .data_in (scoreboard_if.data.tmask),
+        .valid_in(scoreboard_if_valid),
+        .data_in (scoreboard_if_data.tmask),
         .next    (opd_last_fetch),
         `UNUSED_PIN (valid_out),
         .data_out(simd_out),
@@ -160,21 +162,21 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     );
 
     assign pipe_mdata = {
-        scoreboard_if.data.uuid,
-        scoreboard_if.data.wis,
+        scoreboard_if_data.uuid,
+        scoreboard_if_data.wis,
         simd_pid,
         simd_out,
-        scoreboard_if.data.PC,
-        scoreboard_if.data.wb,
-        scoreboard_if.data.ex_type,
-        scoreboard_if.data.op_type,
-        scoreboard_if.data.op_args,
-        scoreboard_if.data.rd,
+        scoreboard_if_data.PC,
+        scoreboard_if_data.wb,
+        scoreboard_if_data.ex_type,
+        scoreboard_if_data.op_type,
+        scoreboard_if_data.op_args,
+        scoreboard_if_data.rd,
         simd_sop,
         simd_eop
     };
 
-    assign scoreboard_if.ready = opd_last_fetch && simd_eop;
+    assign scoreboard_if_ready = opd_last_fetch && simd_eop;
 
     wire pipe_fire_st1 = pipe_valid_st1 && pipe_ready_st1;
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
@@ -185,7 +187,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
-        .valid_in (scoreboard_if.valid),
+        .valid_in (scoreboard_if_valid),
         .ready_in (pipe_ready_in),
         .data_in  ({gpr_rd_valid,     pipe_mdata,     has_collision,     gpr_rd_reg,     gpr_rd_opd}),
         .data_out ({gpr_rd_valid_st1, pipe_mdata_st1, has_collision_st1, gpr_rd_reg_st1, gpr_rd_opd_st1}),
@@ -341,7 +343,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         if (reset) begin
             collisions_r <= '0;
         end else begin
-            collisions_r <= collisions_r + PERF_CTR_BITS'(scoreboard_if.valid && pipe_ready_in && has_collision);
+            collisions_r <= collisions_r + PERF_CTR_BITS'(scoreboard_if_valid && pipe_ready_in && has_collision);
         end
     end
     assign perf_stalls = collisions_r;

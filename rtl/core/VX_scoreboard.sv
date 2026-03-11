@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_writeback_if.vh"
 `include "VX_ibuffer_if.vh"
+`include "VX_scoreboard_if.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -34,7 +35,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     // VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     `VX_IBUFFER_IF_CONSUMER_PORTS_N(ibuffer_if, PER_ISSUE_WARPS),
-    VX_scoreboard_if.master scoreboard_if
+    // VX_scoreboard_if.master scoreboard_if
+    `VX_SCOREBOARD_IF_PRODUCER_PORTS(scoreboard_if)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (ISSUE_ID)
@@ -274,22 +276,22 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .ready_in (arb_ready_in),
         .data_in  (arb_data_in),
         .data_out ({
-            scoreboard_if.data.uuid,
-            scoreboard_if.data.tmask,
-            scoreboard_if.data.PC,
-            scoreboard_if.data.ex_type,
-            scoreboard_if.data.op_type,
-            scoreboard_if.data.op_args,
-            scoreboard_if.data.wb,
-            scoreboard_if.data.used_rs,
-            scoreboard_if.data.rd,
-            scoreboard_if.data.rs1,
-            scoreboard_if.data.rs2,
-            scoreboard_if.data.rs3
+            scoreboard_if_data.uuid,
+            scoreboard_if_data.tmask,
+            scoreboard_if_data.PC,
+            scoreboard_if_data.ex_type,
+            scoreboard_if_data.op_type,
+            scoreboard_if_data.op_args,
+            scoreboard_if_data.wb,
+            scoreboard_if_data.used_rs,
+            scoreboard_if_data.rd,
+            scoreboard_if_data.rs1,
+            scoreboard_if_data.rs2,
+            scoreboard_if_data.rs3
         }),
-        .valid_out (scoreboard_if.valid),
-        .ready_out (scoreboard_if.ready),
-        .sel_out   (scoreboard_if.data.wis)
+        .valid_out (scoreboard_if_valid),
+        .ready_out (scoreboard_if_ready),
+        .sel_out   (scoreboard_if_data.wis)
     );
 
 endmodule

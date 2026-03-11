@@ -17,6 +17,7 @@
 `include "VX_dispatch_if.vh"
 `include "VX_writeback_if.vh"
 `include "VX_ibuffer_if.vh"
+`include "VX_scoreboard_if.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -47,7 +48,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     // flatten: VX_ibuffer_if ibuffer_if [PER_ISSUE_WARPS]();
     `VX_IBUFFER_IF_SIGNALS_N(ibuffer_if, PER_ISSUE_WARPS);
 
-    VX_scoreboard_if scoreboard_if();
+    // VX_scoreboard_if scoreboard_if();
+    `VX_SCOREBOARD_IF_SIGNALS(scoreboard_if);
+
     VX_operands_if operands_if();
 
     VX_ibuffer #(
@@ -80,7 +83,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, writeback_if),
         // .ibuffer_if     (ibuffer_if)
         `VX_IBUFFER_IF_PASS_PORTS(ibuffer_if, ibuffer_if),
-        .scoreboard_if  (scoreboard_if)
+        // .scoreboard_if  (scoreboard_if)
+        `VX_SCOREBOARD_IF_PASS_PORTS(scoreboard_if, scoreboard_if)
     );
 
     VX_operands #(
@@ -94,7 +98,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
      `endif
         // .writeback_if   (writeback_if),
         `VX_WRITEBACK_IF_PASS_PORTS(writeback_if, writeback_if),
-        .scoreboard_if  (scoreboard_if),
+        // .scoreboard_if  (scoreboard_if)
+        `VX_SCOREBOARD_IF_PASS_PORTS(scoreboard_if, scoreboard_if),
+
         .operands_if    (operands_if)
     );
 
