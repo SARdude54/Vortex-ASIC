@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_branch_ctl_if.vh"
 `include "VX_commit_if.vh"
+`include "VX_execute_if.vh"
 
 module VX_alu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -43,9 +44,11 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     localparam PE_IDX_INT   = 0;
     localparam PE_IDX_MDV   = PE_IDX_INT + `EXT_M_ENABLED;
 
-    VX_execute_if #(
-        .data_t (alu_exe_t)
-    ) per_block_execute_if[BLOCK_SIZE]();
+    // VX_execute_if #(
+    //     .data_t (alu_exe_t)
+    // ) per_block_execute_if[BLOCK_SIZE]();
+
+    `VX_EXECUTE_IF_SIGNALS_N(per_block_execute_if, alu_exe_t, BLOCK_SIZE);
 
     VX_result_if #(
         .data_t (alu_res_t)
@@ -62,7 +65,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
         .dispatch_if_valid(dispatch_if_valid),
         .dispatch_if_data(dispatch_if_data),
         .dispatch_if_ready(dispatch_if_ready),
-        .execute_if (per_block_execute_if)
+        // .execute_if (per_block_execute_if)
+        `VX_EXECUTE_IF_PASS_PORTS(execute_if, per_block_execute_if)
     );
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
@@ -71,6 +75,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .data_t (alu_exe_t)
         ) pe_execute_if[PE_COUNT]();
 
+        `VX_EXECUTE_IF_SIGNALS_N(pe_execute_if, alu_exe_t, PE_COUNT);
+
         VX_result_if#(
             .data_t (alu_res_t)
         ) pe_result_if[PE_COUNT]();
@@ -78,7 +84,7 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
             pe_select = PE_IDX_INT;
-            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
+            if (`EXT_M_ENABLED && (`VX_EXECUTE_IF_SLICE_DATA(per_block_execute_if, block_idx).op_args.alu.xtype == ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
         end
 
@@ -92,9 +98,11 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .clk            (clk),
             .reset          (reset),
             .pe_sel         (pe_select),
-            .execute_in_if  (per_block_execute_if[block_idx]),
+            // .execute_in_if  (per_block_execute_if[block_idx]),
+            `VX_EXECUTE_IF_PASS_PORTS_I(execute_in_if, per_block_execute_if, block_idx),
             .result_out_if  (per_block_result_if[block_idx]),
-            .execute_out_if (pe_execute_if),
+            // .execute_out_if (pe_execute_if),
+            `VX_EXECUTE_IF_PASS_PORTS(execute_out_if, pe_execute_if),
             .result_in_if   (pe_result_if)
         );
 
@@ -105,7 +113,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
         ) alu_int (
             .clk        (clk),
             .reset      (reset),
-            .execute_if (pe_execute_if[PE_IDX_INT]),
+            // execute_if (pe_execute_if[PE_IDX_INT]),
+            `VX_EXECUTE_IF_PASS_PORTS_I(execute_if, pe_execute_if, PE_IDX_INT),
             // .branch_ctl_if (branch_ctl_if[block_idx]),
             .branch_ctl_if_valid(`VX_BRANCH_CTL_IF_SLICE_VALID(branch_ctl_if, block_idx)),
             .branch_ctl_if_wid(`VX_BRANCH_CTL_IF_SLICE_WID(branch_ctl_if, block_idx)),

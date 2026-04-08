@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_execute_if.vh"
 
 module VX_pe_switch import VX_gpu_pkg::*; #(
     parameter PE_COUNT        = 0,
@@ -24,9 +25,14 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     input wire          clk,
     input wire          reset,
     input wire [`UP(PE_SEL_BITS)-1:0] pe_sel,
-    VX_execute_if.slave execute_in_if,
+    // VX_execute_if.slave execute_in_if,
+    `VX_EXECUTE_IF_CONSUMER_PORTS(execute_in_if, alu_exe_t),
+
     VX_result_if.master result_out_if,
-    VX_execute_if.master execute_out_if[PE_COUNT],
+
+        // VX_execute_if.master execute_out_if[PE_COUNT],
+    `VX_EXECUTE_IF_PRODUCER_PORTS_N(execute_out_if, alu_exe_t, PE_COUNT),
+
     VX_result_if .slave result_in_if[PE_COUNT]
 );
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -47,18 +53,18 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .sel_in    (pe_sel),
-        .valid_in  (execute_in_if.valid),
-        .ready_in  (execute_in_if.ready),
-        .data_in   (execute_in_if.data),
+        .valid_in  (execute_in_if_valid),
+        .ready_in  (execute_in_if_ready),
+        .data_in   (execute_in_if_data),
         .data_out  (pe_req_data),
         .valid_out (pe_req_valid),
         .ready_out (pe_req_ready)
     );
 
     for (genvar i = 0; i < PE_COUNT; ++i) begin : g_execute_out_if
-        assign execute_out_if[i].valid = pe_req_valid[i];
-        assign execute_out_if[i].data = pe_req_data[i];
-        assign pe_req_ready[i] = execute_out_if[i].ready;
+        assign `VX_EXECUTE_IF_SLICE_VALID(execute_out_if, i) = pe_req_valid[i]; 
+        assign `VX_EXECUTE_IF_SLICE_DATA(execute_out_if, i) = pe_req_data[i];
+        assign pe_req_ready[i] = `VX_EXECUTE_IF_SLICE_READY(execute_out_if, i);
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -68,9 +74,9 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     wire [PE_COUNT-1:0] pe_rsp_ready;
 
     for (genvar i = 0; i < PE_COUNT; ++i) begin : g_result_in_if
-        assign pe_rsp_valid[i] = result_in_if[i].valid;
-        assign pe_rsp_data[i] = result_in_if[i].data;
-        assign result_in_if[i].ready = pe_rsp_ready[i];
+        assign pe_rsp_valid[i] = execute_in_if_valid;
+        assign pe_rsp_data[i] = execute_in_if_data;
+        assign execute_in_if_ready = pe_rsp_ready[i];
     end
 
     VX_stream_arb #(

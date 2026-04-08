@@ -16,6 +16,7 @@
 `include "VX_commit_csr_if.vh"
 `include "VX_warp_ctl_if.vh"
 `include "VX_commit_if.vh"
+`include "VX_execute_if.vh"
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -60,9 +61,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
 
-    VX_execute_if #(
-        .data_t (sfu_exe_t)
-    ) per_block_execute_if[BLOCK_SIZE]();
+    // VX_execute_if #(
+    //     .data_t (sfu_exe_t)
+    // ) per_block_execute_if[BLOCK_SIZE]();
+    `VX_EXECUTE_IF_SIGNALS_N(per_block_execute_if, sfu_exe_t, BLOCK_SIZE);
 
     VX_result_if #(
         .data_t (sfu_res_t)
@@ -79,12 +81,14 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .dispatch_if_valid(dispatch_if_valid),
         .dispatch_if_data(dispatch_if_data),
         .dispatch_if_ready(dispatch_if_ready),
-        .execute_if (per_block_execute_if)
+        // .execute_if (per_block_execute_if)
+        `VX_EXECUTE_IF_PASS_PORTS(execute_if, per_block_execute_if)
     );
 
-    VX_execute_if #(
-        .data_t (sfu_exe_t)
-    ) pe_execute_if[PE_COUNT]();
+    // VX_execute_if #(
+    //     .data_t (sfu_exe_t)
+    // ) pe_execute_if[PE_COUNT]();
+    `VX_EXECUTE_IF_SIGNALS_N(pe_execute_if, sfu_exe_t, PE_COUNT);
 
     VX_result_if#(
         .data_t (sfu_res_t)
@@ -93,7 +97,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     reg [PE_SEL_BITS-1:0] pe_select;
     always @(*) begin
         pe_select = PE_IDX_WCTL;
-        if (inst_sfu_is_csr(per_block_execute_if[0].data.op_type)) begin
+        if (inst_sfu_is_csr(`VX_EXECUTE_IF_SLICE_DATA(per_block_execute_if, 0).op_type)) begin
             pe_select = PE_IDX_CSRS;
         end
     end
@@ -108,9 +112,13 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .pe_sel     (pe_select),
-        .execute_in_if (per_block_execute_if[0]),
+        // .execute_in_if (per_block_execute_if[0]),
+        .execute_in_if_valid(`VX_EXECUTE_IF_SLICE_VALID(per_block_execute_if, 0)),
+        .execute_in_if_ready(`VX_EXECUTE_IF_SLICE_READY(per_block_execute_if, 0)),
+        .execute_in_if_data(`VX_EXECUTE_IF_SLICE_DATA(per_block_execute_if, 0)),
         .result_out_if (per_block_result_if[0]),
-        .execute_out_if (pe_execute_if),
+        // .execute_out_if (pe_execute_if),
+        `VX_EXECUTE_IF_PASS_PORTS(execute_out_if, pe_execute_if),
         .result_in_if (pe_result_if)
     );
 
@@ -120,7 +128,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     ) wctl_unit (
         .clk        (clk),
         .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_WCTL]),
+        // .execute_if (pe_execute_if[PE_IDX_WCTL]),
+        .execute_if_valid(`VX_EXECUTE_IF_SLICE_VALID(pe_execute_if, PE_IDX_WCTL)),
+        .execute_if_ready(`VX_EXECUTE_IF_SLICE_READY(pe_execute_if, PE_IDX_WCTL)),
+        .execute_if_data(`VX_EXECUTE_IF_SLICE_DATA(pe_execute_if, PE_IDX_WCTL)),
         // .warp_ctl_if    (warp_ctl_if)
         `VX_WARP_CTL_IF_PASS_PORTS(warp_ctl_if),
         .result_if  (pe_result_if[PE_IDX_WCTL])
@@ -135,7 +146,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .reset          (reset),
 
         .base_dcrs      (base_dcrs),
-        .execute_if     (pe_execute_if[PE_IDX_CSRS]),
+        // .execute_if     (pe_execute_if[PE_IDX_CSRS]),
+        .execute_if_valid(`VX_EXECUTE_IF_SLICE_VALID(pe_execute_if, PE_IDX_CSRS)),
+        .execute_if_ready(`VX_EXECUTE_IF_SLICE_READY(pe_execute_if, PE_IDX_CSRS)),
+        .execute_if_data(`VX_EXECUTE_IF_SLICE_DATA(pe_execute_if, PE_IDX_CSRS)),
 
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf),

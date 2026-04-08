@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_sched_csr_if.vh"
 `include "VX_commit_csr_if.vh"
+`include "VX_execute_if.vh"
 
 module VX_csr_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -38,7 +39,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `VX_COMMIT_CSR_IF_CONSUMER_PORTS(commit_csr_if),
     // flatten: VX_sched_csr_if.slave       sched_csr_if,
     `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
-    VX_execute_if.slave         execute_if,
+    // VX_execute_if.slave         execute_if,
+    `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, sfu_exe_t),
     VX_result_if.master         result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -46,7 +48,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam DATAW      = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
+    `UNUSED_VAR (execute_if_data.rs3_data)
 
     reg [NUM_LANES-1:0][`XLEN-1:0]  csr_read_data;
     reg  [`XLEN-1:0]                csr_write_data;
@@ -56,25 +58,25 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire                            csr_wr_enable;
     wire                            csr_req_ready;
 
-    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
-    wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm;
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if_data.op_args.csr.addr;
+    wire [RV_REGS_BITS-1:0] csr_imm = execute_if_data.op_args.csr.imm;
 
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 
     // wait for all pending instructions for current warp to complete
-    assign sched_csr_if_alm_empty_wid = execute_if.data.wid;
+    assign sched_csr_if_alm_empty_wid = execute_if_data.wid;
     wire no_pending_instr = sched_csr_if_alm_empty || ~is_fpu_csr;
 
-    wire csr_req_valid = execute_if.valid && no_pending_instr;
-    assign execute_if.ready = csr_req_ready && no_pending_instr;
+    wire csr_req_valid = execute_if_valid && no_pending_instr;
+    assign execute_if_ready = csr_req_ready && no_pending_instr;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rs1_data
-        assign rs1_data[i] = execute_if.data.rs1_data[i];
+        assign rs1_data[i] = execute_if_data.rs1_data[i];
     end
 
-    wire csr_write_enable = (execute_if.data.op_type == INST_SFU_CSRRW);
+    wire csr_write_enable = (execute_if_data.op_type == INST_SFU_CSRRW);
 
     VX_csr_data #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -101,15 +103,15 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `endif
 
         .read_enable    (csr_req_valid && csr_rd_enable),
-        .read_uuid      (execute_if.data.uuid),
-        .read_wid       (execute_if.data.wid),
+        .read_uuid      (execute_if_data.uuid),
+        .read_wid       (execute_if_data.wid),
         .read_addr      (csr_addr),
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
 
         .write_enable   (csr_req_valid && csr_wr_enable),
-        .write_uuid     (execute_if.data.uuid),
-        .write_wid      (execute_if.data.wid),
+        .write_uuid     (execute_if_data.uuid),
+        .write_wid      (execute_if_data.wid),
         .write_addr     (csr_addr),
         .write_data     (csr_write_data)
     );
@@ -120,14 +122,14 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_wtid
         if (PID_BITS != 0) begin : g_pid
-            assign wtid[i] = `XLEN'(execute_if.data.pid * NUM_LANES + i);
+            assign wtid[i] = `XLEN'(execute_if_data.pid * NUM_LANES + i);
         end else begin : g_no_pid
             assign wtid[i] = `XLEN'(i);
         end
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gtid
-        assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.wid) << NT_BITS) + wtid[i];
+        assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if_data.wid) << NT_BITS) + wtid[i];
     end
 
     always @(*) begin
@@ -144,11 +146,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // CSR write
 
-    assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
+    assign csr_req_data = execute_if_data.op_args.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
     assign csr_wr_enable = csr_write_enable || (| csr_req_data);
 
     always @(*) begin
-        case (execute_if.data.op_type)
+        case (execute_if_data.op_type)
             INST_SFU_CSRRW: begin
                 csr_write_data = csr_req_data;
             end
@@ -163,8 +165,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     // unlock the warp
-    assign sched_csr_if_unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.eop && is_fpu_csr;
-    assign sched_csr_if_unlock_wid = execute_if.data.wid;
+    assign sched_csr_if_unlock_warp = csr_req_valid && csr_req_ready && execute_if_data.eop && is_fpu_csr;
+    assign sched_csr_if_unlock_wid = execute_if_data.wid;
 
     VX_elastic_buffer #(
         .DATAW (DATAW),
@@ -174,7 +176,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, csr_read_data,       execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
+        .data_in   ({execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, csr_read_data,       execute_if_data.pid, execute_if_data.sop, execute_if_data.eop}),
         .data_out  ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.PC,  result_if.data.rd,  result_if.data.wb,  result_if.data.data, result_if.data.pid,  result_if.data.sop,  result_if.data.eop}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
