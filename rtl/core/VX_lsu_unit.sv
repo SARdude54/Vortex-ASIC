@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_commit_if.vh"
+`include "VX_execute_if.vh"
 
 module VX_lsu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -38,9 +39,10 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
-    VX_execute_if #(
-        .data_t (lsu_exe_t)
-    ) per_block_execute_if[BLOCK_SIZE]();
+    // VX_execute_if #(
+    //     .data_t (lsu_exe_t)
+    // ) per_block_execute_if[BLOCK_SIZE]();
+    `VX_EXECUTE_IF_SIGNALS_N(per_block_execute_if, lsu_exe_t, BLOCK_SIZE);
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -53,7 +55,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .dispatch_if_valid(dispatch_if_valid),
         .dispatch_if_data(dispatch_if_data),
         .dispatch_if_ready(dispatch_if_ready),
-        .execute_if (per_block_execute_if)
+        // .execute_if (per_block_execute_if)
+        `VX_EXECUTE_IF_PASS_PORTS(execute_if, per_block_execute_if)
     );
 
     VX_result_if #(
@@ -67,7 +70,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             `SCOPE_IO_BIND  (block_idx)
             .clk        (clk),
             .reset      (reset),
-            .execute_if (per_block_execute_if[block_idx]),
+            // .execute_if (per_block_execute_if[block_idx]),
+            `VX_EXECUTE_IF_PASS_PORTS_I(execute_if, per_block_execute_if, block_idx),
             .result_if  (per_block_result_if[block_idx]),
             .lsu_mem_if (lsu_mem_if[block_idx])
         );

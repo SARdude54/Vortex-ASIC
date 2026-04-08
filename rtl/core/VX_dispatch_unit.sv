@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_execute_if.vh"
 
 module VX_dispatch_unit import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
@@ -29,7 +30,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     output logic [`ISSUE_WIDTH-1:0] dispatch_if_ready,
 
     // outputs
-    VX_execute_if.master    execute_if [BLOCK_SIZE]
+    // VX_execute_if.master    execute_if [BLOCK_SIZE]
+    `VX_EXECUTE_IF_PRODUCER_PORTS_N(execute_if, alu_exe_t, BLOCK_SIZE)
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
@@ -226,9 +228,9 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
                 warp_pid,
                 warp_sop,
                 warp_eop}),
-            .data_out  (execute_if[block_idx].data),
-            .valid_out (execute_if[block_idx].valid),
-            .ready_out (execute_if[block_idx].ready)
+            .data_out  (`VX_EXECUTE_IF_SLICE_DATA(execute_if, block_idx)),
+            .valid_out (`VX_EXECUTE_IF_SLICE_VALID(execute_if, block_idx)),
+            .ready_out (`VX_EXECUTE_IF_SLICE_READY(execute_if, block_idx))
         );
     end
 

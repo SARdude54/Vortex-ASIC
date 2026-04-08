@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_branch_ctl_if.vh"
+`include "VX_execute_if.vh"
 
 module VX_alu_int import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -23,7 +24,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // Inputs
-    VX_execute_if.slave     execute_if,
+    // VX_execute_if.slave     execute_if,
+    `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, alu_exe_t),
 
     // Outputs
     VX_result_if.master     result_if,
@@ -41,7 +43,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     localparam PID_WIDTH      = `UP(PID_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
+    `UNUSED_VAR (execute_if_data.rs3_data)
 
     wire [NUM_LANES-1:0][`XLEN-1:0] add_result;
     wire [NUM_LANES-1:0][`XLEN:0]   sub_result; // +1 bit for branch compare
@@ -59,24 +61,24 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_result_r;
 
 `ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_args.alu.is_w;
+    wire is_alu_w = execute_if_data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
 
-    wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if.data.op_type);
-    wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if.data.op_type);
-    wire                   is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
+    wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if_data.op_type);
+    wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if_data.op_type);
+    wire                   is_br_op = (execute_if_data.op_args.alu.xtype == ALU_TYPE_BRANCH);
     wire                  is_sub_op = inst_alu_is_sub(alu_op);
     wire                  is_signed = inst_alu_signed(alu_op);
     wire [1:0]             op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if_data.rs1_data;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if_data.rs2_data;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if_data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if_data.PC)}} : alu_in1;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if_data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if_data.op_args.alu.imm)}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if_data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if_data.op_args.alu.imm)}} : alu_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_add_result
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
@@ -125,8 +127,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0] vote_true, vote_false;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_vote_calc
         wire pred = alu_in1[i][0];
-        assign vote_true[i]  = execute_if.data.tmask[i] && pred;
-        assign vote_false[i] = execute_if.data.tmask[i] && ~pred;
+        assign vote_true[i]  = execute_if_data.tmask[i] && pred;
+        assign vote_false[i] = execute_if_data.tmask[i] && ~pred;
     end
     wire has_vote_true  = (| vote_true);
     wire has_vote_false = (| vote_false);
@@ -185,7 +187,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                     end
                 endcase
             end
-            assign shfl_result[i] = execute_if.data.tmask[lane] ? alu_in1[lane] : alu_in1[i];
+            assign shfl_result[i] = execute_if_data.tmask[lane] ? alu_in1[lane] : alu_in1[i];
         end
     end else begin : g_shfl_0
         assign shfl_result[0] = alu_in1[0];
@@ -195,7 +197,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         wire [`XLEN-1:0] slt_br_result = `XLEN'({is_br_op && ~(| sub_result[i][`XLEN-1:0]), sub_result[i][`XLEN]});
         wire [`XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`XLEN-1:0] : slt_br_result;
         always @(*) begin
-            if (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
+            if (execute_if_data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
                 case (alu_op[2])
                     1'b0: alu_result[i] = vote_result[i];
                     1'b1: alu_result[i] = shfl_result[i];
@@ -231,7 +233,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
             .N (NUM_LANES),
             .REVERSE (1)
         ) last_tid_sel (
-            .data_in (execute_if.data.tmask),
+            .data_in (execute_if_data.tmask),
             .index_out (last_tid),
             `UNUSED_PIN (onehot_out),
             `UNUSED_PIN (valid_out)
@@ -245,9 +247,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
-        .valid_in (execute_if.valid),
-        .ready_in (execute_if.ready),
-        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result,   execute_if.data.PC, cbr_dest,   is_br_op,   br_op,   last_tid}),
+        .valid_in (execute_if_valid),
+        .ready_in (execute_if_ready),
+        .data_in  ({execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.rd, execute_if_data.wb, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, alu_result,   execute_if_data.PC, cbr_dest,   is_br_op,   br_op,   last_tid}),
         .data_out ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.rd,  result_if.data.wb,  result_if.data.pid,  result_if.data.sop,  result_if.data.eop,  alu_result_r, PC_r,               cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)

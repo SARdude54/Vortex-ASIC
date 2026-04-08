@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_execute_if.vh"
 
 module VX_lsu_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -22,7 +23,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // Inputs
-    VX_execute_if.slave     execute_if,
+    // VX_execute_if.slave     execute_if,
+    `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, lsu_exe_t),
 
     // Outputs
     VX_result_if.master     result_if,
@@ -51,19 +53,18 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .data_t (lsu_res_t)
     ) result_no_rsp_if();
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
+    `UNUSED_VAR (execute_if_data.rs3_data)
 
     // full address calculation
 
     wire req_is_fence, rsp_is_fence;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
-        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`XLEN, execute_if.data.op_args.lsu.offset);
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr // 
+        assign full_addr[i] = execute_if_data.rs1_data[i] + `SEXT(`XLEN, execute_if_data.op_args.lsu.offset);
     end
 
     // address type calculation
-
     wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_flags
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
@@ -111,13 +112,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     reg fence_lock;
 
-    assign req_is_fence = inst_lsu_is_fence(execute_if.data.op_type);
+    assign req_is_fence = inst_lsu_is_fence(execute_if_data.op_type);
 
     always @(posedge clk) begin
         if (reset) begin
             fence_lock <= 0;
         end else begin
-            if (mem_req_fire && req_is_fence && execute_if.data.eop) begin
+            if (mem_req_fire && req_is_fence && execute_if_data.eop) begin
                 fence_lock <= 1;
             end
             if (mem_rsp_fire && rsp_is_fence && mem_rsp_eop_pkt) begin
@@ -126,25 +127,25 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
     end
 
-    wire req_skip = req_is_fence && ~execute_if.data.eop;
-    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if.data.wb) || req_skip;
+    wire req_skip = req_is_fence && ~execute_if_data.eop;
+    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if_data.wb) || req_skip;
 
-    assign mem_req_valid = execute_if.valid
+    assign mem_req_valid = execute_if_valid
                         && ~req_skip
                         && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                         && ~fence_lock;
 
-    assign no_rsp_buf_valid = execute_if.valid
+    assign no_rsp_buf_valid = execute_if_valid
                            && no_rsp_buf_enable
                            && (req_skip || mem_req_ready)
                            && ~fence_lock;
 
-    assign execute_if.ready = (mem_req_ready || req_skip)
+    assign execute_if_ready = (mem_req_ready || req_skip)
                            && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                            && ~fence_lock;
 
-    assign mem_req_mask = execute_if.data.tmask;
-    assign mem_req_rw = execute_if.data.op_args.lsu.is_store;
+    assign mem_req_mask = execute_if_data.tmask;
+    assign mem_req_rw = execute_if_data.op_args.lsu.is_store;
 
     // address formatting
 
@@ -160,7 +161,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         reg [LSU_WORD_SIZE-1:0] mem_req_byteen_w;
         always @(*) begin
             mem_req_byteen_w = '0;
-            case (inst_lsu_wsize(execute_if.data.op_type))
+            case (inst_lsu_wsize(execute_if_data.op_type))
                 0: begin // 8-bit
                     mem_req_byteen_w[req_align[i]] = 1'b1;
                 end
@@ -185,25 +186,25 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // memory misalignment not supported!
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_missalign
-        wire lsu_req_fire = execute_if.valid && execute_if.ready;
-        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if.data.op_type))) == 0),
+        wire lsu_req_fire = execute_if_valid && execute_if_ready;
+        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if_data.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if_data.op_type))) == 0),
             ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
-                $time, execute_if.data.wid, to_fullPC(execute_if.data.PC), full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.uuid))
+                $time, execute_if_data.wid, to_fullPC(execute_if_data.PC), full_addr[i], inst_lsu_wsize(execute_if_data.op_type), execute_if_data.uuid))
     end
 
     // store data formatting
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_data
         always @(*) begin
-            mem_req_data[i] = execute_if.data.rs2_data[i];
+            mem_req_data[i] = execute_if_data.rs2_data[i];
             case (req_align[i])
-                1: mem_req_data[i][`XLEN-1:8]  = execute_if.data.rs2_data[i][`XLEN-9:0];
-                2: mem_req_data[i][`XLEN-1:16] = execute_if.data.rs2_data[i][`XLEN-17:0];
-                3: mem_req_data[i][`XLEN-1:24] = execute_if.data.rs2_data[i][`XLEN-25:0];
+                1: mem_req_data[i][`XLEN-1:8]  = execute_if_data.rs2_data[i][`XLEN-9:0];
+                2: mem_req_data[i][`XLEN-1:16] = execute_if_data.rs2_data[i][`XLEN-17:0];
+                3: mem_req_data[i][`XLEN-1:24] = execute_if_data.rs2_data[i][`XLEN-25:0];
             `ifdef XLEN_64
-                4: mem_req_data[i][`XLEN-1:32] = execute_if.data.rs2_data[i][`XLEN-33:0];
-                5: mem_req_data[i][`XLEN-1:40] = execute_if.data.rs2_data[i][`XLEN-41:0];
-                6: mem_req_data[i][`XLEN-1:48] = execute_if.data.rs2_data[i][`XLEN-49:0];
-                7: mem_req_data[i][`XLEN-1:56] = execute_if.data.rs2_data[i][`XLEN-57:0];
+                4: mem_req_data[i][`XLEN-1:32] = execute_if_data.rs2_data[i][`XLEN-33:0];
+                5: mem_req_data[i][`XLEN-1:40] = execute_if_data.rs2_data[i][`XLEN-41:0];
+                6: mem_req_data[i][`XLEN-1:48] = execute_if_data.rs2_data[i][`XLEN-49:0];
+                7: mem_req_data[i][`XLEN-1:56] = execute_if_data.rs2_data[i][`XLEN-57:0];
             `endif
                 default:;
             endcase
@@ -218,8 +219,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
-        wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.sop;
-        wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.eop;
+        wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if_data.sop;
+        wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if_data.eop;
         wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
         wire mem_rsp_eop_pkt_fire= mem_rsp_fire && mem_rsp_eop_pkt;
         wire full;
@@ -282,14 +283,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // pack memory request tag
     assign mem_req_tag = {
-        execute_if.data.uuid,
-        execute_if.data.wid,
-        execute_if.data.PC,
-        execute_if.data.wb,
-        execute_if.data.rd,
-        execute_if.data.op_type,
+        execute_if_data.uuid,
+        execute_if_data.wid,
+        execute_if_data.PC,
+        execute_if_data.wb,
+        execute_if_data.rd,
+        execute_if_data.op_type,
         req_align,
-        execute_if.data.pid,
+        execute_if_data.pid,
         pkt_waddr,
         req_is_fence
     };
@@ -477,7 +478,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (no_rsp_buf_valid),
         .ready_in  (no_rsp_buf_ready),
-        .data_in   ({execute_if.data.uuid,       execute_if.data.wid,       execute_if.data.tmask,       execute_if.data.PC,       execute_if.data.pid,       execute_if.data.sop,       execute_if.data.eop}),
+        .data_in   ({execute_if_data.uuid,       execute_if_data.wid,       execute_if_data.tmask,       execute_if_data.PC,       execute_if_data.pid,       execute_if_data.sop,       execute_if_data.eop}),
         .data_out  ({result_no_rsp_if.data.uuid, result_no_rsp_if.data.wid, result_no_rsp_if.data.tmask, result_no_rsp_if.data.PC, result_no_rsp_if.data.pid, result_no_rsp_if.data.sop, result_no_rsp_if.data.eop}),
         .valid_out (result_no_rsp_if.valid),
         .ready_out (result_no_rsp_if.ready)
@@ -506,24 +507,24 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
-        if (execute_if.valid && fence_lock) begin
+        if (execute_if_valid && fence_lock) begin
             `TRACE(2, ("%t: *** %s fence wait\n", $time, INSTANCE_ID))
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(2, ("%t: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, to_fullPC(execute_if.data.PC), mem_req_mask))
+                `TRACE(2, ("%t: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if_data.wid, to_fullPC(execute_if_data.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
                 `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
                 `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
-                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, mem_req_tag, execute_if_data.uuid))
             end else begin
-                `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, to_fullPC(execute_if.data.PC), mem_req_mask))
+                `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if_data.wid, to_fullPC(execute_if_data.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
-                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if_data.rd, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, mem_req_tag, execute_if_data.uuid))
             end
         end
         if (mem_rsp_fire) begin
@@ -555,7 +556,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             full_addr,
             mem_req_byteen,
             mem_req_data,
-            execute_if.data.uuid,
+            execute_if_data.uuid,
             rsp_data,
             rsp_uuid
         },
@@ -570,7 +571,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_LSU
     ila_lsu ila_lsu_inst (
         .clk    (clk),
-        .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
+        .probe0 ({execute_if.valid, execute_if_data, execute_if_ready}),
         .probe1 ({lsu_mem_if.req_valid, lsu_mem_if.req_data, lsu_mem_if.req_ready}),
         .probe2 ({lsu_mem_if.rsp_valid, lsu_mem_if.rsp_data, lsu_mem_if.rsp_ready})
     );
