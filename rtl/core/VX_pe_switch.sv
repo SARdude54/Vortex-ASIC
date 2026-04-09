@@ -74,9 +74,9 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     wire [PE_COUNT-1:0] pe_rsp_ready;
 
     for (genvar i = 0; i < PE_COUNT; ++i) begin : g_result_in_if
-        assign pe_rsp_valid[i] = execute_in_if_valid;
-        assign pe_rsp_data[i] = execute_in_if_data;
-        assign execute_in_if_ready = pe_rsp_ready[i];
+        assign pe_rsp_valid[i]   = result_in_if[i].valid;
+        assign pe_rsp_data[i]    = result_in_if[i].data;
+        assign result_in_if[i].ready = pe_rsp_ready[i];
     end
 
     VX_stream_arb #(
