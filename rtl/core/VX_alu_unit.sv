@@ -71,9 +71,9 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
-        VX_execute_if #(
-            .data_t (alu_exe_t)
-        ) pe_execute_if[PE_COUNT]();
+        // VX_execute_if #(
+        //     .data_t (alu_exe_t)
+        // ) pe_execute_if[PE_COUNT]();
 
         `VX_EXECUTE_IF_SIGNALS_N(pe_execute_if, alu_exe_t, PE_COUNT);
 
@@ -130,7 +130,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
         ) muldiv_unit (
             .clk        (clk),
             .reset      (reset),
-            .execute_if (pe_execute_if[PE_IDX_MDV]),
+            // .execute_if (pe_execute_if[PE_IDX_MDV]),
+            `VX_EXECUTE_IF_PASS_PORTS_I(execute_if, pe_execute_if, PE_IDX_MDV),
             .result_if  (pe_result_if[PE_IDX_MDV])
         );
     `endif

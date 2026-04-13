@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_execute_if.vh"
 
 module VX_alu_muldiv import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -21,7 +22,8 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     input wire          reset,
 
     // Inputs
-    VX_execute_if.slave execute_if,
+    // VX_execute_if.slave execute_if,
+    `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, alu_exe_t),
 
     // Outputs
     VX_result_if.master result_if
@@ -31,14 +33,14 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     localparam PID_WIDTH = `UP(PID_BITS);
     localparam TAG_WIDTH = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1;
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
+    `UNUSED_VAR (execute_if_data.rs3_data)
 
-    wire [INST_M_BITS-1:0] muldiv_op = INST_M_BITS'(execute_if.data.op_type);
+    wire [INST_M_BITS-1:0] muldiv_op = INST_M_BITS'(execute_if_data.op_type);
 
     wire is_mulx_op = inst_m_is_mulx(muldiv_op);
     wire is_signed_op = inst_m_signed(muldiv_op);
 `ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_args.alu.is_w;
+    wire is_alu_w = execute_if_data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
@@ -53,7 +55,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     wire [PID_WIDTH-1:0] mul_pid_out;
     wire mul_sop_out, mul_eop_out;
 
-    wire mul_valid_in = execute_if.valid && is_mulx_op;
+    wire mul_valid_in = execute_if_valid && is_mulx_op;
     wire mul_ready_in;
     wire mul_valid_out;
     wire mul_ready_out;
@@ -70,8 +72,8 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_tmp
         reg [`XLEN-1:0] mul_resultl, mul_resulth;
-        wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs1_data[i];
-        wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs2_data[i];
+        wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if_data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if_data.rs1_data[i];
+        wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if_data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if_data.rs2_data[i];
         always @(*) begin
             dpi_imul (mul_fire_in, is_signed_mul_a, is_signed_mul_b, mul_in1, mul_in2, mul_resultl, mul_resulth);
         end
@@ -86,7 +88,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mul_result_tmp}),
+        .data_in  ({mul_valid_in,  execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, mul_result_tmp}),
         .data_out ({mul_valid_out, mul_uuid_out,         mul_wid_out,         mul_tmask_out,         mul_PC_out,         mul_rd_out,         mul_wb_out,         mul_pid_out,         mul_sop_out,         mul_eop_out,         mul_result_out})
     );
 
@@ -104,8 +106,8 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`XLEN:0] mul_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_in
-        assign mul_in1[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
-        assign mul_in2[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
+        assign mul_in1[i] = is_alu_w ? {{(`XLEN-31){execute_if_data.rs1_data[i][31]}}, execute_if_data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if_data.rs1_data[i][`XLEN-1], execute_if_data.rs1_data[i]};
+        assign mul_in2[i] = is_alu_w ? {{(`XLEN-31){execute_if_data.rs2_data[i][31]}}, execute_if_data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if_data.rs2_data[i][`XLEN-1], execute_if_data.rs2_data[i]};
     end
 
     wire mul_strode;
@@ -141,7 +143,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     reg [TAG_WIDTH+2-1:0] mul_tag_r;
     always @(posedge clk) begin
         if (mul_valid_in && mul_ready_in) begin
-            mul_tag_r <= {execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, is_mulh_in, is_alu_w, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop};
+            mul_tag_r <= {execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, is_mulh_in, is_alu_w, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop};
         end
     end
 
@@ -150,8 +152,8 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 `else
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_multiplier
-        wire [`XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
-        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
+        wire [`XLEN:0] mul_in1 = {is_signed_mul_a && execute_if_data.rs1_data[i][`XLEN-1], execute_if_data.rs1_data[i]};
+        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && execute_if_data.rs2_data[i][`XLEN-1], execute_if_data.rs2_data[i]};
 
         VX_multiplier #(
             .A_WIDTH (`XLEN+1),
@@ -176,7 +178,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, is_mulh_in,  is_alu_w}),
+        .data_in  ({mul_valid_in,  execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, is_mulh_in,  is_alu_w}),
         .data_out ({mul_valid_out, mul_uuid_out,         mul_wid_out,         mul_tmask_out,         mul_PC_out,         mul_rd_out,         mul_wb_out,         mul_pid_out,         mul_sop_out,         mul_eop_out,         is_mulh_out, is_mul_w_out})
     );
 
@@ -211,7 +213,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     wire is_rem_op = inst_m_is_rem(muldiv_op);
 
-    wire div_valid_in = execute_if.valid && ~is_mulx_op;
+    wire div_valid_in = execute_if_valid && ~is_mulx_op;
     wire div_ready_in;
     wire div_valid_out;
     wire div_ready_out;
@@ -221,11 +223,11 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_in
     `ifdef XLEN_64
-        assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]}: execute_if.data.rs1_data[i];
-        assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]}: execute_if.data.rs2_data[i];
+        assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if_data.rs1_data[i][31]}}, execute_if_data.rs1_data[i][31:0]}: execute_if_data.rs1_data[i];
+        assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if_data.rs2_data[i][31]}}, execute_if_data.rs2_data[i][31:0]}: execute_if_data.rs2_data[i];
     `else
-        assign div_in1[i] = execute_if.data.rs1_data[i];
-        assign div_in2[i] = execute_if.data.rs2_data[i];
+        assign div_in1[i] = execute_if_data.rs1_data[i];
+        assign div_in2[i] = execute_if_data.rs2_data[i];
     `endif
     end
 
@@ -251,7 +253,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         .clk(clk),
         .reset    (reset),
         .enable   (div_ready_in),
-        .data_in  ({div_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, div_result_in}),
+        .data_in  ({div_valid_in,  execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, div_result_in}),
         .data_out ({div_valid_out, div_uuid_out,         div_wid_out,         div_tmask_out,         div_PC_out,         div_rd_out,         div_wb_out,         div_pid_out,         div_sop_out,         div_eop_out,         div_result_out})
     );
 
@@ -300,7 +302,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     reg [TAG_WIDTH+2-1:0] div_tag_r;
     always @(posedge clk) begin
         if (div_valid_in && div_ready_in) begin
-            div_tag_r <= {execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, is_rem_op, is_alu_w, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop};
+            div_tag_r <= {execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, is_rem_op, is_alu_w, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop};
         end
     end
 
@@ -319,7 +321,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 `endif
 
     // can accept new request?
-    assign execute_if.ready = is_mulx_op ? mul_ready_in : div_ready_in;
+    assign execute_if_ready = is_mulx_op ? mul_ready_in : div_ready_in;
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
