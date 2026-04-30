@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_alu_muldiv import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -26,7 +27,8 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, alu_exe_t),
 
     // Outputs
-    VX_result_if.master result_if
+    // VX_result_if.master result_if.
+    `VX_RESULT_IF_PRODUCER_PORTS(result_if, alu_res_t)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -335,9 +337,9 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         .ready_in  ({div_ready_out, mul_ready_out}),
         .data_in   ({{div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out},
                      {mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, mul_result_out}}),
-        .data_out  ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.PC, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, result_if.data.data}),
-        .valid_out (result_if.valid),
-        .ready_out (result_if.ready),
+        .data_out  ({result_if_data.uuid, result_if_data.wid, result_if_data.tmask, result_if_data.PC, result_if_data.rd, result_if_data.wb, result_if_data.pid, result_if_data.sop, result_if_data.eop, result_if_data.data}),
+        .valid_out (result_if_valid),
+        .ready_out (result_if_ready),
         `UNUSED_PIN (sel_out)
     );
 

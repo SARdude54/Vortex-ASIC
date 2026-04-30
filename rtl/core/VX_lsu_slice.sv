@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_lsu_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -27,7 +28,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, lsu_exe_t),
 
     // Outputs
-    VX_result_if.master     result_if,
+    // VX_result_if.master     result_if,
+    `VX_RESULT_IF_PRODUCER_PORTS(result_if, lsu_res_t),
+
     VX_lsu_mem_if.master    lsu_mem_if
 );
     localparam NUM_LANES    = `NUM_LSU_LANES;
@@ -45,13 +48,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // tag = uuid + tag_id
     localparam TAG_WIDTH = UUID_WIDTH + TAG_ID_WIDTH;
 
-    VX_result_if #(
-        .data_t (lsu_res_t)
-    ) result_rsp_if();
+    // VX_result_if #(
+    //     .data_t (lsu_res_t)
+    // ) result_rsp_if();
+    `VX_RESULT_IF_SIGNALS(result_rsp_if, lsu_res_t);
 
-    VX_result_if #(
-        .data_t (lsu_res_t)
-    ) result_no_rsp_if();
+
+    // VX_result_if #(
+    //     .data_t (lsu_res_t)
+    // ) result_no_rsp_if();
+    `VX_RESULT_IF_SIGNALS(result_no_rsp_if, lsu_res_t);
 
     `UNUSED_VAR (execute_if_data.rs3_data)
 
@@ -465,9 +471,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .valid_in  (mem_rsp_valid),
         .ready_in  (mem_rsp_ready),
         .data_in   ({rsp_uuid,                rsp_wid,                mem_rsp_mask,             rsp_pc,                rsp_wb,                rsp_rd,                rsp_data,                rsp_pid,                mem_rsp_sop_pkt,        mem_rsp_eop_pkt}),
-        .data_out  ({result_rsp_if.data.uuid, result_rsp_if.data.wid, result_rsp_if.data.tmask, result_rsp_if.data.PC, result_rsp_if.data.wb, result_rsp_if.data.rd, result_rsp_if.data.data, result_rsp_if.data.pid, result_rsp_if.data.sop, result_rsp_if.data.eop}),
-        .valid_out (result_rsp_if.valid),
-        .ready_out (result_rsp_if.ready)
+        .data_out  ({result_rsp_if_data.uuid, result_rsp_if_data.wid, result_rsp_if_data.tmask, result_rsp_if_data.PC, result_rsp_if_data.wb, result_rsp_if_data.rd, result_rsp_if_data.data, result_rsp_if_data.pid, result_rsp_if_data.sop, result_rsp_if_data.eop}),
+        .valid_out (result_rsp_if_valid),
+        .ready_out (result_rsp_if_ready)
     );
 
     VX_elastic_buffer #(
@@ -479,14 +485,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .valid_in  (no_rsp_buf_valid),
         .ready_in  (no_rsp_buf_ready),
         .data_in   ({execute_if_data.uuid,       execute_if_data.wid,       execute_if_data.tmask,       execute_if_data.PC,       execute_if_data.pid,       execute_if_data.sop,       execute_if_data.eop}),
-        .data_out  ({result_no_rsp_if.data.uuid, result_no_rsp_if.data.wid, result_no_rsp_if.data.tmask, result_no_rsp_if.data.PC, result_no_rsp_if.data.pid, result_no_rsp_if.data.sop, result_no_rsp_if.data.eop}),
-        .valid_out (result_no_rsp_if.valid),
-        .ready_out (result_no_rsp_if.ready)
+        .data_out  ({result_no_rsp_if_data.uuid, result_no_rsp_if_data.wid, result_no_rsp_if_data.tmask, result_no_rsp_if_data.PC, result_no_rsp_if_data.pid, result_no_rsp_if_data.sop, result_no_rsp_if_data.eop}),
+        .valid_out (result_no_rsp_if_valid),
+        .ready_out (result_no_rsp_if_ready)
     );
 
-    assign result_no_rsp_if.data.rd   = '0;
-    assign result_no_rsp_if.data.wb   = 1'b0;
-    assign result_no_rsp_if.data.data = result_rsp_if.data.data; // arbiter MUX optimization
+    assign result_no_rsp_if_data.rd   = '0;
+    assign result_no_rsp_if_data.wb   = 1'b0;
+    assign result_no_rsp_if_data.data = result_rsp_if_data.data; // arbiter MUX optimization
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
@@ -496,12 +502,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  ({result_no_rsp_if.valid, result_rsp_if.valid}),
-        .ready_in  ({result_no_rsp_if.ready, result_rsp_if.ready}),
-        .data_in   ({result_no_rsp_if.data, result_rsp_if.data}),
-        .data_out  (result_if.data),
-        .valid_out (result_if.valid),
-        .ready_out (result_if.ready),
+        .valid_in  ({result_no_rsp_if_valid, result_rsp_if_valid}),
+        .ready_in  ({result_no_rsp_if_ready, result_rsp_if_ready}),
+        .data_in   ({result_no_rsp_if_data, result_rsp_if_data}),
+        .data_out  (result_if_data),
+        .valid_out (result_if_valid),
+        .ready_out (result_if_ready),
         `UNUSED_PIN (sel_out)
     );
 

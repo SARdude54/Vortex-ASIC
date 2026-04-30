@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_pe_switch import VX_gpu_pkg::*; #(
     parameter PE_COUNT        = 0,
@@ -20,7 +21,8 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     parameter REQ_OUT_BUF     = 0,
     parameter RSP_OUT_BUF     = 0,
     parameter `STRING ARBITER = "R",
-    parameter PE_SEL_BITS = `CLOG2(PE_COUNT)
+    parameter PE_SEL_BITS = `CLOG2(PE_COUNT),
+    parameter type result_t = alu_res_t
 ) (
     input wire          clk,
     input wire          reset,
@@ -28,12 +30,14 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     // VX_execute_if.slave execute_in_if,
     `VX_EXECUTE_IF_CONSUMER_PORTS(execute_in_if, alu_exe_t),
 
-    VX_result_if.master result_out_if,
+    // VX_result_if.master result_out_if,
+    `VX_RESULT_IF_PRODUCER_PORTS(result_out_if, result_t),
 
         // VX_execute_if.master execute_out_if[PE_COUNT],
     `VX_EXECUTE_IF_PRODUCER_PORTS_N(execute_out_if, alu_exe_t, PE_COUNT),
 
-    VX_result_if .slave result_in_if[PE_COUNT]
+    // VX_result_if .slave result_in_if[PE_COUNT]
+    `VX_RESULT_IF_CONSUMER_PORTS_N(result_in_if, result_t, PE_COUNT)
 );
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
@@ -74,9 +78,9 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     wire [PE_COUNT-1:0] pe_rsp_ready;
 
     for (genvar i = 0; i < PE_COUNT; ++i) begin : g_result_in_if
-        assign pe_rsp_valid[i]   = result_in_if[i].valid;
-        assign pe_rsp_data[i]    = result_in_if[i].data;
-        assign result_in_if[i].ready = pe_rsp_ready[i];
+        assign pe_rsp_valid[i]   = `VX_RESULT_IF_SLICE_VALID(result_in_if, i);
+        assign pe_rsp_data[i]    = `VX_RESULT_IF_SLICE_DATA(result_in_if, i);
+        assign `VX_RESULT_IF_SLICE_READY(result_in_if, i) = pe_rsp_ready[i];
     end
 
     VX_stream_arb #(
@@ -90,9 +94,9 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
         .valid_in  (pe_rsp_valid),
         .ready_in  (pe_rsp_ready),
         .data_in   (pe_rsp_data),
-        .data_out  (result_out_if.data),
-        .valid_out (result_out_if.valid),
-        .ready_out (result_out_if.ready),
+        .data_out  (result_out_if_data),
+        .valid_out (result_out_if_valid),
+        .ready_out (result_out_if_ready),
         `UNUSED_PIN (sel_out)
     );
 

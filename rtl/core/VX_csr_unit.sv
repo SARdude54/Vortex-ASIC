@@ -15,6 +15,7 @@
 `include "VX_sched_csr_if.vh"
 `include "VX_commit_csr_if.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_csr_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -41,7 +42,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `VX_SCHED_CSR_IF_CONSUMER_PORTS(sched_csr_if),
     // VX_execute_if.slave         execute_if,
     `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, sfu_exe_t),
-    VX_result_if.master         result_if
+    // VX_result_if.master         result_if
+    `VX_RESULT_IF_PRODUCER_PORTS(result_if, sfu_res_t)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -177,9 +179,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
         .data_in   ({execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.PC, execute_if_data.rd, execute_if_data.wb, csr_read_data,       execute_if_data.pid, execute_if_data.sop, execute_if_data.eop}),
-        .data_out  ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.PC,  result_if.data.rd,  result_if.data.wb,  result_if.data.data, result_if.data.pid,  result_if.data.sop,  result_if.data.eop}),
-        .valid_out (result_if.valid),
-        .ready_out (result_if.ready)
+        .data_out  ({result_if_data.uuid,  result_if_data.wid,  result_if_data.tmask,  result_if_data.PC,  result_if_data.rd,  result_if_data.wb,  result_if_data.data, result_if_data.pid,  result_if_data.sop,  result_if_data.eop}),
+        .valid_out (result_if_valid),
+        .ready_out (result_if_ready)
     );
 
 endmodule
