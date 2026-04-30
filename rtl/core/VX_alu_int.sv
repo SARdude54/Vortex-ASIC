@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_branch_ctl_if.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_alu_int import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -28,7 +29,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     `VX_EXECUTE_IF_CONSUMER_PORTS(execute_if, alu_exe_t),
 
     // Outputs
-    VX_result_if.master     result_if,
+    // VX_result_if.master     result_if,
+    `VX_RESULT_IF_PRODUCER_PORTS(result_if, alu_res_t),
     // VX_branch_ctl_if.master branch_ctl_if
     output wire                branch_ctl_if_valid,
     output wire [NW_WIDTH-1:0] branch_ctl_if_wid,
@@ -250,9 +252,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .valid_in (execute_if_valid),
         .ready_in (execute_if_ready),
         .data_in  ({execute_if_data.uuid, execute_if_data.wid, execute_if_data.tmask, execute_if_data.rd, execute_if_data.wb, execute_if_data.pid, execute_if_data.sop, execute_if_data.eop, alu_result,   execute_if_data.PC, cbr_dest,   is_br_op,   br_op,   last_tid}),
-        .data_out ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.rd,  result_if.data.wb,  result_if.data.pid,  result_if.data.sop,  result_if.data.eop,  alu_result_r, PC_r,               cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
-        .valid_out (result_if.valid),
-        .ready_out (result_if.ready)
+        .data_out ({result_if_data.uuid,  result_if_data.wid,  result_if_data.tmask,  result_if_data.rd,  result_if_data.wb,  result_if_data.pid,  result_if_data.sop,  result_if_data.eop,  alu_result_r, PC_r,               cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
+        .valid_out (result_if_valid),
+        .ready_out (result_if_ready)
     );
 
     `UNUSED_VAR (br_op_r)
@@ -264,12 +266,12 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_less  = br_result[0];
     wire is_equal = br_result[1];
 
-    wire result_fire = result_if.valid && result_if.ready;
-    wire br_enable = result_fire && is_br_op_r && result_if.data.eop;
+    wire result_fire = result_if_valid && result_if_ready;
+    wire br_enable = result_fire && is_br_op_r && result_if_data.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
     wire [PC_BITS-1:0] br_dest = is_br_static ? from_fullPC(br_result) : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
+    `ASSIGN_BLOCKED_WID (br_wid, result_if_data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
         .DATAW  (1 + NW_WIDTH + 1 + PC_BITS),
@@ -284,16 +286,16 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
         wire [`XLEN-1:0] PC_next = to_fullPC(PC_r) + `XLEN'(4);
-        assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
+        assign result_if_data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
     end
 
-    assign result_if.data.PC = PC_r;
+    assign result_if_data.PC = PC_r;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
             `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.PC), br_taken, to_fullPC(br_dest), result_if.data.uuid))
+                $time, INSTANCE_ID, br_wid, to_fullPC(result_if_data.PC), br_taken, to_fullPC(br_dest), result_if_data.uuid))
         end
     end
 `endif

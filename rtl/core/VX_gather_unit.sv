@@ -13,17 +13,20 @@
 
 `include "VX_define.vh"
 `include "VX_commit_if.vh"
+`include "VX_result_if.vh"
 
 module VX_gather_unit import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
-    parameter OUT_BUF    = 0
+    parameter OUT_BUF    = 0,
+    parameter type RESULT_T = alu_res_t
 ) (
     input  wire         clk,
     input  wire         reset,
 
     // inputs
-    VX_result_if.slave  result_if [BLOCK_SIZE],
+    // VX_result_if.slave  result_if [BLOCK_SIZE],
+    `VX_RESULT_IF_CONSUMER_PORTS_N(result_if, RESULT_T, BLOCK_SIZE),
 
     // outputs
     // VX_commit_if.master commit_if [`ISSUE_WIDTH]
@@ -48,9 +51,9 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     wire [BLOCK_SIZE-1:0][ISSUE_ISW_W-1:0] result_in_isw;
 
     for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_commit_in
-        assign result_in_valid[i] = result_if[i].valid;
-        assign result_in_data[i]  = result_if[i].data;
-        assign result_if[i].ready = result_in_ready[i];
+        assign result_in_valid[i] = `VX_RESULT_IF_SLICE_VALID(result_if, i);
+        assign result_in_data[i]  = `VX_RESULT_IF_SLICE_DATA(result_if, i);
+        assign `VX_RESULT_IF_SLICE_READY(result_if, i) = result_in_ready[i];
         if (BLOCK_SIZE != `ISSUE_WIDTH) begin : g_result_in_isw_partial
             if (BLOCK_SIZE != 1) begin : g_block
                 assign result_in_isw[i] = {result_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
@@ -82,9 +85,10 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin: g_out_bufs
-        VX_result_if #(
-            .data_t (result_t)
-        ) result_tmp_if();
+        // VX_result_if #(
+        //     .data_t (result_t)
+        // ) result_tmp_if();
+        `VX_RESULT_IF_SIGNALS(result_tmp_if, result_t);
 
         VX_elastic_buffer #(
             .DATAW   (DATAW),
@@ -96,9 +100,9 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             .valid_in   (result_out_valid[i]),
             .ready_in   (result_out_ready[i]),
             .data_in    (result_out_data[i]),
-            .data_out   (result_tmp_if.data),
-            .valid_out  (result_tmp_if.valid),
-            .ready_out  (result_tmp_if.ready)
+            .data_out   (result_tmp_if_data),
+            .valid_out  (result_tmp_if_valid),
+            .ready_out  (result_tmp_if_ready)
         );
 
         logic [SIMD_IDX_W-1:0] commit_sid_w;
@@ -108,39 +112,39 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
         if (LPID_BITS != 0) begin : g_lpid
             logic [LPID_WIDTH-1:0] lpid;
             if (SIMD_COUNT != 1) begin : g_simd
-                assign {commit_sid_w, lpid} = result_tmp_if.data.pid;
+                assign {commit_sid_w, lpid} = result_tmp_if_data.pid;
             end else begin : g_no_simd
                 assign commit_sid_w = 0;
-                assign lpid = result_tmp_if.data.pid;
+                assign lpid = result_tmp_if_data.pid;
             end
             always @(*) begin
                 commit_tmask_w = '0;
                 commit_data_w  = 'x;
                 for (integer j = 0; j < NUM_LANES; ++j) begin
-                    commit_tmask_w[lpid * NUM_LANES + j] = result_tmp_if.data.tmask[j];
-                    commit_data_w[lpid * NUM_LANES + j] = result_tmp_if.data.data[j];
+                    commit_tmask_w[lpid * NUM_LANES + j] = result_tmp_if_data.tmask[j];
+                    commit_data_w[lpid * NUM_LANES + j] = result_tmp_if_data.data[j];
                 end
             end
         end else begin : g_no_lpid
-            assign commit_sid_w   = result_tmp_if.data.pid;
-            assign commit_tmask_w = result_tmp_if.data.tmask;
-            assign commit_data_w  = result_tmp_if.data.data;
+            assign commit_sid_w   = result_tmp_if_data.pid;
+            assign commit_tmask_w = result_tmp_if_data.tmask;
+            assign commit_data_w  = result_tmp_if_data.data;
         end
 
-        assign commit_if_valid[i] = result_tmp_if.valid;
+        assign commit_if_valid[i] = result_tmp_if_valid;
         assign commit_if_data[i] = {
-            result_tmp_if.data.uuid,
-            result_tmp_if.data.wid,
+            result_tmp_if_data.uuid,
+            result_tmp_if_data.wid,
             commit_sid_w,
             commit_tmask_w,
-            result_tmp_if.data.PC,
-            result_tmp_if.data.wb,
-            result_tmp_if.data.rd,
+            result_tmp_if_data.PC,
+            result_tmp_if_data.wb,
+            result_tmp_if_data.rd,
             commit_data_w,
-            result_tmp_if.data.sop,
-            result_tmp_if.data.eop
+            result_tmp_if_data.sop,
+            result_tmp_if_data.eop
         };
-        assign result_tmp_if.ready = commit_if_ready[i];
+        assign result_tmp_if_ready = commit_if_ready[i];
     end
 
 endmodule

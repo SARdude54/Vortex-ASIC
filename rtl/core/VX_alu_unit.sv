@@ -15,6 +15,7 @@
 `include "VX_branch_ctl_if.vh"
 `include "VX_commit_if.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_alu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -50,9 +51,10 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
 
     `VX_EXECUTE_IF_SIGNALS_N(per_block_execute_if, alu_exe_t, BLOCK_SIZE);
 
-    VX_result_if #(
-        .data_t (alu_res_t)
-    ) per_block_result_if[BLOCK_SIZE]();
+    // VX_result_if #(
+    //     .data_t (alu_res_t)
+    // ) per_block_result_if[BLOCK_SIZE]();
+    `VX_RESULT_IF_SIGNALS_N(per_block_result_if, alu_res_t, BLOCK_SIZE);
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -77,9 +79,10 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
 
         `VX_EXECUTE_IF_SIGNALS_N(pe_execute_if, alu_exe_t, PE_COUNT);
 
-        VX_result_if#(
-            .data_t (alu_res_t)
-        ) pe_result_if[PE_COUNT]();
+        // VX_result_if#(
+        //     .data_t (alu_res_t)
+        // ) pe_result_if[PE_COUNT]();
+        `VX_RESULT_IF_SIGNALS_N(pe_result_if, alu_res_t, PE_COUNT);
 
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
@@ -93,17 +96,20 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .NUM_LANES   (NUM_LANES),
             .ARBITER     ("R"),
             .REQ_OUT_BUF (0),
-            .RSP_OUT_BUF (PARTIAL_BW ? 1 : 3)
+            .RSP_OUT_BUF (PARTIAL_BW ? 1 : 3),
+            .result_t    (alu_res_t)
         ) pe_switch (
             .clk            (clk),
             .reset          (reset),
             .pe_sel         (pe_select),
             // .execute_in_if  (per_block_execute_if[block_idx]),
             `VX_EXECUTE_IF_PASS_PORTS_I(execute_in_if, per_block_execute_if, block_idx),
-            .result_out_if  (per_block_result_if[block_idx]),
+            // .result_out_if  (per_block_result_if[block_idx]),
+            `VX_RESULT_IF_PASS_PORTS_I(result_out_if, per_block_result_if, block_idx),
             // .execute_out_if (pe_execute_if),
             `VX_EXECUTE_IF_PASS_PORTS(execute_out_if, pe_execute_if),
-            .result_in_if   (pe_result_if)
+            // .result_in_if '  (pe_result_if)
+            `VX_RESULT_IF_PASS_PORTS(result_in_if, pe_result_if)
         );
 
         VX_alu_int #(
@@ -120,7 +126,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .branch_ctl_if_wid(`VX_BRANCH_CTL_IF_SLICE_WID(branch_ctl_if, block_idx)),
             .branch_ctl_if_taken(`VX_BRANCH_CTL_IF_SLICE_TAKEN(branch_ctl_if, block_idx)),
             .branch_ctl_if_dest(`VX_BRANCH_CTL_IF_SLICE_DEST(branch_ctl_if, block_idx)),
-            .result_if  (pe_result_if[PE_IDX_INT])
+            // .result_if  (pe_result_if[PE_IDX_INT])
+            `VX_RESULT_IF_PASS_PORTS_I(result_if, pe_result_if, PE_IDX_INT)
         );
 
     `ifdef EXT_M_ENABLE
@@ -132,7 +139,8 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             .reset      (reset),
             // .execute_if (pe_execute_if[PE_IDX_MDV]),
             `VX_EXECUTE_IF_PASS_PORTS_I(execute_if, pe_execute_if, PE_IDX_MDV),
-            .result_if  (pe_result_if[PE_IDX_MDV])
+            // .result_if  (pe_result_if[PE_IDX_MDV])
+            `VX_RESULT_IF_PASS_PORTS_I(result_if, pe_result_if, PE_IDX_MDV)
         );
     `endif
     end
@@ -140,11 +148,13 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (PARTIAL_BW ? 3 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 3 : 0),
+        .RESULT_T(alu_res_t)
     ) gather_unit (
         .clk       (clk),
         .reset     (reset),
-        .result_if (per_block_result_if),
+        //.result_if (per_block_result_if),
+        `VX_RESULT_IF_PASS_PORTS(result_if, per_block_result_if),
         // .commit_if (commit_if)
         `VX_COMMIT_IF_PASS_PORTS(commit_if, commit_if)
     );

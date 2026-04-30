@@ -17,6 +17,7 @@
 `include "VX_warp_ctl_if.vh"
 `include "VX_commit_if.vh"
 `include "VX_execute_if.vh"
+`include "VX_result_if.vh"
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -66,9 +67,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     // ) per_block_execute_if[BLOCK_SIZE]();
     `VX_EXECUTE_IF_SIGNALS_N(per_block_execute_if, sfu_exe_t, BLOCK_SIZE);
 
-    VX_result_if #(
-        .data_t (sfu_res_t)
-    ) per_block_result_if[BLOCK_SIZE]();
+    // VX_result_if #(
+    //     .data_t (sfu_res_t)
+    // ) per_block_result_if[BLOCK_SIZE]();
+    `VX_RESULT_IF_SIGNALS_N(per_block_result_if, sfu_res_t, BLOCK_SIZE);
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -90,9 +92,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     // ) pe_execute_if[PE_COUNT]();
     `VX_EXECUTE_IF_SIGNALS_N(pe_execute_if, sfu_exe_t, PE_COUNT);
 
-    VX_result_if#(
-        .data_t (sfu_res_t)
-    ) pe_result_if[PE_COUNT]();
+    // VX_result_if#(
+    //     .data_t (sfu_res_t)
+    // ) pe_result_if[PE_COUNT]();
+    `VX_RESULT_IF_SIGNALS_N(pe_result_if, sfu_res_t, PE_COUNT);
 
     reg [PE_SEL_BITS-1:0] pe_select;
     always @(*) begin
@@ -107,7 +110,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES  (NUM_LANES),
         .ARBITER    ("R"),
         .REQ_OUT_BUF(0),
-        .RSP_OUT_BUF(3)
+        .RSP_OUT_BUF(3),
+        .result_t    (sfu_res_t)
     ) pe_switch (
         .clk        (clk),
         .reset      (reset),
@@ -116,10 +120,12 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .execute_in_if_valid(`VX_EXECUTE_IF_SLICE_VALID(per_block_execute_if, 0)),
         .execute_in_if_ready(`VX_EXECUTE_IF_SLICE_READY(per_block_execute_if, 0)),
         .execute_in_if_data(`VX_EXECUTE_IF_SLICE_DATA(per_block_execute_if, 0)),
-        .result_out_if (per_block_result_if[0]),
+        // .result_out_if (per_block_result_if[0]),
+        `VX_RESULT_IF_PASS_PORTS_I(result_out_if, per_block_result_if, 0),
         // .execute_out_if (pe_execute_if),
         `VX_EXECUTE_IF_PASS_PORTS(execute_out_if, pe_execute_if),
-        .result_in_if (pe_result_if)
+        // .result_in_if (pe_result_if)
+        `VX_RESULT_IF_PASS_PORTS(result_in_if, pe_result_if)
     );
 
     VX_wctl_unit #(
@@ -134,7 +140,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .execute_if_data(`VX_EXECUTE_IF_SLICE_DATA(pe_execute_if, PE_IDX_WCTL)),
         // .warp_ctl_if    (warp_ctl_if)
         `VX_WARP_CTL_IF_PASS_PORTS(warp_ctl_if),
-        .result_if  (pe_result_if[PE_IDX_WCTL])
+        // .result_if  (pe_result_if[PE_IDX_WCTL]),
+        `VX_RESULT_IF_PASS_PORTS_I(result_if, pe_result_if, PE_IDX_WCTL)
     );
 
     VX_csr_unit #(
@@ -164,7 +171,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         `VX_SCHED_CSR_IF_PASS_PORTS(sched_csr_if),
         // .commit_csr_if  (commit_csr_if),
         `VX_COMMIT_CSR_IF_PASS_PORTS(commit_csr_if),
-        .result_if      (pe_result_if[PE_IDX_CSRS])
+        // .result_if      (pe_result_if[PE_IDX_CSRS])
+        `VX_RESULT_IF_PASS_PORTS_I(result_if, pe_result_if, PE_IDX_CSRS)
     );
 
     VX_gather_unit #(
@@ -174,7 +182,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     ) gather_unit (
         .clk       (clk),
         .reset     (reset),
-        .result_if (per_block_result_if),
+        //.result_if (per_block_result_if),
+        `VX_RESULT_IF_PASS_PORTS(result_if, per_block_result_if),
         // .commit_if (commit_if)
         `VX_COMMIT_IF_PASS_PORTS(commit_if, commit_if)
     );
