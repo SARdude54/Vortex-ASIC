@@ -1,10 +1,6 @@
 // flattens signals and structs from VX_dcr_bus_if
-
-
-
-
 `ifndef VX_DCR_BUS_FLAT_PORTS_VH
-`define VX_DCR_BUS_FlAT_PORTS_VH
+`define VX_DCR_BUS_FLAT_PORTS_VH
 
 
 `define VX_DCR_BUS_SIGNALS(prefix, DCR_ADDR_WIDTH, DCR_DATA_WIDTH) \
@@ -32,12 +28,4 @@
 
 
 `endif
-
-
-
-
-
-
-
-
 
