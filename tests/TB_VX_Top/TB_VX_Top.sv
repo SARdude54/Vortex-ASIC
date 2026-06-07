@@ -32,6 +32,7 @@ module TB_VX_Top;
     localparam int LINE_BITS  = 8 * LINE_BYTES;
     localparam int LINE_WORDS = LINE_BYTES / 4;
     localparam int LINE_ADDR_W = tb_mem_bus_if_ADDR_WIDTH;
+    localparam logic [31:0] NOP_INSTR = 32'h0000_0013;
 
     localparam [LINE_ADDR_W-1:0] STARTUP_LINE_ADDR =
         (`STARTUP_ADDR >> `CLOG2(`L1_LINE_SIZE));
@@ -46,7 +47,7 @@ module TB_VX_Top;
         // Fill every 32-bit word in the cache line with:
         // addi x0, x0, 0
         for (int w = 0; w < LINE_WORDS; ++w) begin
-            make_mem_line[w*32 +: 32] = 32'h0000_0013;
+            make_mem_line[w*32 +: 32] = NOP_INSTR;
         end
     end
     endfunction
@@ -74,6 +75,19 @@ module TB_VX_Top;
     wire saw_any_fetch_rsp     = |saw_any_fetch_rsp_p;
     wire saw_startup_fetch_req = |saw_startup_fetch_req_p;
     wire saw_startup_fetch_rsp = |saw_startup_fetch_rsp_p;
+
+    // Fetch and decode observation flags
+    // Level 3B frontend observation flags
+    logic saw_core_fetch_valid;
+    logic saw_core_fetch_fire;
+    logic saw_core_fetch_nop;
+
+    logic saw_decode_input_valid;
+    logic saw_decode_input_fire;
+    logic saw_decode_input_nop;
+
+    logic saw_decode_output_valid;
+    logic saw_decode_output_fire;
 
     // one independent memory model per memory port
     for (genvar p = 0; p < `L1_MEM_PORTS; ++p) begin : g_mem_model
@@ -183,6 +197,8 @@ module TB_VX_Top;
         .busy(busy)
     );
 
+    `define CORE0_PATH UUT.socket.g_cores[0].core
+
     
     initial clk = 0;
     always #5 clk = ~clk;
@@ -246,6 +262,17 @@ module TB_VX_Top;
         write_addr  = '0;
         write_data  = '0;
 
+        saw_core_fetch_valid    = 1'b0;
+        saw_core_fetch_fire     = 1'b0;
+        saw_core_fetch_nop      = 1'b0;
+
+        saw_decode_input_valid  = 1'b0;
+        saw_decode_input_fire   = 1'b0;
+        saw_decode_input_nop    = 1'b0;
+
+        saw_decode_output_valid = 1'b0;
+        saw_decode_output_fire  = 1'b0;
+
         repeat (5) @(posedge clk);
         reset = 1'b0;
 
@@ -260,23 +287,44 @@ module TB_VX_Top;
         `endif
 
         // program Vortex startup DCRs
-        dcr_write(`VX_DCR_BASE_STARTUP_ARG0, 32'h0000_0000);
-        dcr_write(`VX_DCR_BASE_STARTUP_ARG1, 32'h0000_0000);
+        dcr_write(`VX_DCR_BASE_STARTUP_ARG0, '0);
+        dcr_write(`VX_DCR_BASE_STARTUP_ARG1, '0);
         dcr_write(`VX_DCR_BASE_MPM_CLASS, `VX_DCR_MPM_CLASS_CORE);
 
         // If the startup fetch request and response both happen, the test passes.
-
-        for (int cycle = 0; cycle < 500; ++cycle) begin
+        for (int cycle = 0; cycle < 1000; ++cycle) begin
             @(posedge clk);
 
-            if (saw_any_fetch_req && saw_any_fetch_rsp) begin
-                $display("PASSED TB_VX_Top Level 3A instruction fetch request/response test");
+            if (saw_core_fetch_fire
+                && saw_decode_input_fire
+                && saw_decode_output_valid
+                && saw_decode_input_nop) begin
+
+                $display("PASSED TB_VX_Top Level 3B fetch-to-decode test");
+
+                if (saw_any_fetch_req && saw_any_fetch_rsp) begin
+                    $display("INFO: Level 3A external fetch request/response also passed");
+                end
+
+                if (saw_core_fetch_nop) begin
+                    $display("INFO: VX_core fetch_if observed NOP instruction 0x%0h", NOP_INSTR);
+                end
+
+                if (saw_decode_input_nop) begin
+                    $display("INFO: VX_decode input observed NOP instruction 0x%0h", NOP_INSTR);
+                end
+
+                if (saw_decode_output_fire) begin
+                    $display("INFO: VX_decode output was accepted by downstream issue");
+                end else begin
+                    $display("INFO: VX_decode output became valid, but downstream issue acceptance was not required for Level 3B");
+                end
 
                 if (saw_startup_fetch_req && saw_startup_fetch_rsp) begin
                     $display("INFO: Fetch also matched STARTUP_ADDR line_addr=0x%0h", STARTUP_LINE_ADDR);
                 end else begin
                     $display(
-                        "INFO: Fetch worked, but no accepted fetch matched STARTUP_ADDR line_addr=0x%0h. Core appears to be fetching from reset/boot PC.",
+                        "INFO: Frontend worked, but no accepted fetch matched STARTUP_ADDR line_addr=0x%0h. Core appears to be fetching from reset/boot PC.",
                         STARTUP_LINE_ADDR
                     );
                 end
@@ -286,18 +334,46 @@ module TB_VX_Top;
         end
 
         if (!saw_any_mem_req) begin
-            $fatal("No memory request observed after DCR startup programming");
+            $fatal("Level 3A failed: no memory request observed after DCR startup programming");
         end
 
         if (!saw_any_fetch_req) begin
-            $fatal("Memory requests occurred, but no read/fetch request was observed");
+            $fatal("Level 3A failed: memory requests occurred, but no read/fetch request was observed");
         end
 
         if (!saw_any_fetch_rsp) begin
-            $fatal("Read/fetch request occurred, but no response was accepted");
+            $fatal("Level 3A failed: read/fetch request occurred, but no response was accepted");
         end
 
-        $fatal("Instruction fetch request/response test timed out unexpectedly");
+        if (!saw_core_fetch_valid) begin
+            $fatal("Level 3B failed: VX_core fetch_if_valid was never asserted");
+        end
+
+        if (!saw_core_fetch_fire) begin
+            $fatal("Level 3B failed: VX_core fetch_if_valid asserted, but fetch_if_ready never accepted it");
+        end
+
+        if (!saw_core_fetch_nop) begin
+            $fatal("Level 3B failed: VX_core fetch_if fired, but NOP instruction 0x%0h was not observed", NOP_INSTR);
+        end
+
+        if (!saw_decode_input_valid) begin
+            $fatal("Level 3B failed: VX_decode input fetch_if_valid was never asserted");
+        end
+
+        if (!saw_decode_input_fire) begin
+            $fatal("Level 3B failed: VX_decode input did not handshake fetch_if_valid && fetch_if_ready");
+        end
+
+        if (!saw_decode_input_nop) begin
+            $fatal("Level 3B failed: VX_decode input did not observe NOP instruction 0x%0h", NOP_INSTR);
+        end
+
+        if (!saw_decode_output_valid) begin
+            $fatal("Level 3B failed: VX_decode never produced decode_if_valid");
+        end
+
+        $fatal("Level 3B timed out unexpectedly");
     end
 
     //monitor DCR
@@ -309,6 +385,78 @@ module TB_VX_Top;
                 write_addr,
                 write_data
             );
+        end
+    end
+
+    // monitor fetch to decode frontend path
+    always @(posedge clk) begin
+        if (!reset) begin
+
+            // VX_fetch output and VX_core fetch_if shared wire
+            if (`CORE0_PATH.fetch_if_valid) begin
+                saw_core_fetch_valid <= 1'b1;
+
+                $display(
+                    "[CORE FETCH_IF VALID] time=%0t PC=0x%0h wid=%0d instr=0x%0h uuid=0x%0h ready=%0b",
+                    $time,
+                    `CORE0_PATH.fetch_if_data.PC,
+                    `CORE0_PATH.fetch_if_data.wid,
+                    `CORE0_PATH.fetch_if_data.instr,
+                    `CORE0_PATH.fetch_if_data.uuid,
+                    `CORE0_PATH.fetch_if_ready
+                );
+
+                if (`CORE0_PATH.fetch_if_data.instr == NOP_INSTR) begin
+                    saw_core_fetch_nop <= 1'b1;
+                end
+            end
+
+            if (`CORE0_PATH.fetch_if_valid && `CORE0_PATH.fetch_if_ready) begin
+                saw_core_fetch_fire <= 1'b1;
+            end
+
+            // VX_decode input side
+            if (`CORE0_PATH.decode.fetch_if_valid) begin
+                saw_decode_input_valid <= 1'b1;
+
+                $display(
+                    "[DECODE INPUT VALID] time=%0t PC=0x%0h wid=%0d instr=0x%0h uuid=0x%0h ready=%0b",
+                    $time,
+                    `CORE0_PATH.decode.fetch_if_data.PC,
+                    `CORE0_PATH.decode.fetch_if_data.wid,
+                    `CORE0_PATH.decode.fetch_if_data.instr,
+                    `CORE0_PATH.decode.fetch_if_data.uuid,
+                    `CORE0_PATH.decode.fetch_if_ready
+                );
+
+                if (`CORE0_PATH.decode.fetch_if_data.instr == NOP_INSTR) begin
+                    saw_decode_input_nop <= 1'b1;
+                end
+            end
+
+            if (`CORE0_PATH.decode.fetch_if_valid && `CORE0_PATH.decode.fetch_if_ready) begin
+                saw_decode_input_fire <= 1'b1;
+            end
+
+            // VX_decode output side
+            if (`CORE0_PATH.decode_if_valid) begin
+                saw_decode_output_valid <= 1'b1;
+
+                $display(
+                    "[DECODE OUTPUT VALID] time=%0t PC=0x%0h wid=%0d ex_type=0x%0h op_type=0x%0h wb=%0b ready=%0b",
+                    $time,
+                    `CORE0_PATH.decode_if_data.PC,
+                    `CORE0_PATH.decode_if_data.wid,
+                    `CORE0_PATH.decode_if_data.ex_type,
+                    `CORE0_PATH.decode_if_data.op_type,
+                    `CORE0_PATH.decode_if_data.wb,
+                    `CORE0_PATH.decode_if_ready
+                );
+            end
+
+            if (`CORE0_PATH.decode_if_valid && `CORE0_PATH.decode_if_ready) begin
+                saw_decode_output_fire <= 1'b1;
+            end
         end
     end
 
