@@ -78,6 +78,23 @@ module TB_VX_Top;
     initial clk = 0;
     always #5 clk = ~clk;
 
+    task automatic dcr_write(
+    input [VX_DCR_ADDR_WIDTH-1:0] addr,
+    input [VX_DCR_DATA_WIDTH-1:0] data
+    );
+    begin
+        @(posedge clk);
+        write_valid <= 1'b1;
+        write_addr  <= addr;
+        write_data  <= data;
+
+        @(posedge clk);
+        write_valid <= 1'b0;
+        write_addr  <= '0;
+        write_data  <= '0;
+    end
+    endtask
+
     initial begin
         $dumpfile("wave.vcd");
         $dumpvars(0, TB_VX_Top);
@@ -97,6 +114,27 @@ module TB_VX_Top;
 
         repeat (20) @(posedge clk);
         $finish;
+    end
+
+    always @(posedge clk) begin
+        if (!reset && write_valid) begin
+            #1;
+
+            assert (UUT.socket_dcr_bus_if_write_valid === write_valid)
+                else $fatal("DCR valid did not propagate into VX_top socket_dcr_bus_if");
+
+            assert (UUT.socket_dcr_bus_if_write_addr === write_addr)
+                else $fatal("DCR addr did not propagate into VX_top socket_dcr_bus_if");
+
+            assert (UUT.socket_dcr_bus_if_write_data === write_data)
+                else $fatal("DCR data did not propagate into VX_top socket_dcr_bus_if");
+
+            $display(
+                "[DCR CHECK] VX_top socket_dcr_bus_if matched addr=0x%0h data=0x%0h",
+                UUT.socket_dcr_bus_if_write_addr,
+                UUT.socket_dcr_bus_if_write_data
+            );
+        end
     end
 
 endmodule
