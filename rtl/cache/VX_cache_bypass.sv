@@ -12,7 +12,7 @@
 // limitations under the License.
 
 `include "VX_cache_define.vh"
-`include "mem/VX_mem_bus_if.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_cache_bypass import VX_gpu_pkg::*; #(
     parameter NUM_REQS          = 1,
@@ -25,45 +25,66 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     parameter LINE_SIZE         = 1,
 
     parameter CORE_ADDR_WIDTH   = 1,
-
     parameter CORE_TAG_WIDTH    = 1,
 
     parameter MEM_ADDR_WIDTH    = 1,
     parameter MEM_TAG_IN_WIDTH  = 1,
 
     parameter CORE_OUT_BUF      = 0,
-    parameter MEM_OUT_BUF       = 0
- ) (
+    parameter MEM_OUT_BUF       = 0,
+
+    parameter UUIDW             = `UP(UUID_WIDTH),
+    parameter CORE_TAG_ID_WIDTH = CORE_TAG_WIDTH - UUIDW,
+    parameter MEM_TAG_ID_WIDTH  = `CLOG2(`CDIV(NUM_REQS, MEM_PORTS)) + CORE_TAG_ID_WIDTH,
+    parameter MEM_TAG_NC1_WIDTH = UUIDW + MEM_TAG_ID_WIDTH,
+    parameter MEM_TAG_NC2_WIDTH = MEM_TAG_NC1_WIDTH + `CLOG2(LINE_SIZE / WORD_SIZE),
+    parameter MEM_TAG_OUT_WIDTH = CACHE_ENABLE ? `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH) : MEM_TAG_NC2_WIDTH,
+    parameter MEM_TAG_ARB_WIDTH = MEM_TAG_OUT_WIDTH + `ARB_SEL_BITS((CACHE_ENABLE ? 2 : 1) * MEM_PORTS, MEM_PORTS)
+) (
     input wire clk,
     input wire reset,
 
     // Core request in
-    // flatten: VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
-    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(core_bus_in, NUM_REGS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+    // VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
+    `VX_MEM_BUS_IF_CONSUMER_PORTS_AW_N(core_bus_in_if, WORD_SIZE, CORE_TAG_WIDTH, MEM_FLAGS_WIDTH, CORE_ADDR_WIDTH, NUM_REQS),
 
     // Core request out
-    // flatten: VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
-    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(core_bus_out, NUM_REGS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+    // VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_AW_N(core_bus_out_if, WORD_SIZE, CORE_TAG_WIDTH, MEM_FLAGS_WIDTH, CORE_ADDR_WIDTH, NUM_REQS),
 
     // Memory request in
-    // flatten: VX_mem_bus_if.slave     mem_bus_in_if [MEM_PORTS],
-    `VX_MEM_BUS_FLAT_CONSUMER_PORTS(mem_bus_in, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
+    // VX_mem_bus_if.slave     mem_bus_in_if [MEM_PORTS],
+    `VX_MEM_BUS_IF_CONSUMER_PORTS_AW_N(mem_bus_in_if, LINE_SIZE, MEM_TAG_IN_WIDTH, MEM_FLAGS_WIDTH, MEM_ADDR_WIDTH, MEM_PORTS),
 
     // Memory request out
-    // flatten: VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
-    `VX_MEM_BUS_FLAT_PRODUCER_PORTS(mem_bus_out, MEM_PORTS, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
-
+    // VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_AW_N(mem_bus_out_if, LINE_SIZE, MEM_TAG_ARB_WIDTH, MEM_FLAGS_WIDTH, MEM_ADDR_WIDTH, MEM_PORTS)
 );
     localparam DIRECT_PASSTHRU   = !CACHE_ENABLE && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == MEM_PORTS);
     localparam CORE_DATA_WIDTH   = WORD_SIZE * 8;
     localparam WORDS_PER_LINE    = LINE_SIZE / WORD_SIZE;
     localparam WSEL_BITS         = `CLOG2(WORDS_PER_LINE);
 
-    localparam CORE_TAG_ID_WIDTH = CORE_TAG_WIDTH - UUID_WIDTH;
-    localparam MEM_TAG_ID_WIDTH  = `CLOG2(`CDIV(NUM_REQS, MEM_PORTS)) + CORE_TAG_ID_WIDTH;
-    localparam MEM_TAG_NC1_WIDTH = UUID_WIDTH + MEM_TAG_ID_WIDTH;
-    localparam MEM_TAG_NC2_WIDTH = MEM_TAG_NC1_WIDTH + WSEL_BITS;
-    localparam MEM_TAG_OUT_WIDTH = CACHE_ENABLE ? `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH) : MEM_TAG_NC2_WIDTH;
+    // need to check these
+    `STATIC_ASSERT(NUM_REQS > 0, ("NUM_REQS must be > 0"))
+    `STATIC_ASSERT(MEM_PORTS > 0, ("MEM_PORTS must be > 0"))
+    `STATIC_ASSERT(WORD_SIZE > 0, ("WORD_SIZE must be > 0"))
+    `STATIC_ASSERT(LINE_SIZE > 0, ("LINE_SIZE must be > 0"))
+    `STATIC_ASSERT(CORE_TAG_WIDTH >= UUIDW, ("invalid CORE_TAG_WIDTH"))
+
+    `STATIC_ASSERT(
+        MEM_TAG_NC1_WIDTH == CORE_TAG_WIDTH + `ARB_SEL_BITS(NUM_REQS, MEM_PORTS),
+        ("invalid MEM_TAG_NC1_WIDTH")
+    )
+
+    `STATIC_ASSERT(
+        MEM_TAG_ARB_WIDTH == MEM_TAG_OUT_WIDTH + `ARB_SEL_BITS((CACHE_ENABLE ? 2 : 1) * MEM_PORTS, MEM_PORTS),
+        ("invalid MEM_TAG_ARB_WIDTH")
+    )
+
+    `STATIC_ASSERT(LINE_SIZE >= WORD_SIZE, ("line size must be >= word size"))
+    `STATIC_ASSERT(0 == (LINE_SIZE % WORD_SIZE), ("line size must be multiple of word size"))
+    `STATIC_ASSERT(CORE_ADDR_WIDTH == (MEM_ADDR_WIDTH + WSEL_BITS), ("invalid core/mem address width relationship"))
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
 
@@ -74,13 +95,17 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     //     .TAG_WIDTH (CORE_TAG_WIDTH)
     // ) core_bus_nc_switch_if[(CACHE_ENABLE ? 2 : 1) * NUM_REQS]();
 
-    `VX_MEM_BUS_SIGNALS(core_bus_nc_switch, (CACHE_ENABLE ? 2 : 1) * NUM_REQS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, CORE_TAG_WIDTH)
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (WORD_SIZE),
+    //     .TAG_WIDTH (CORE_TAG_WIDTH)
+    // ) core_bus_nc_switch_if[(CACHE_ENABLE ? 2 : 1) * NUM_REQS]();
+    `VX_MEM_BUS_IF_SIGNALS_AW_N(core_bus_nc_switch_if, WORD_SIZE, CORE_TAG_WIDTH, MEM_FLAGS_WIDTH, CORE_ADDR_WIDTH, (CACHE_ENABLE ? 2 : 1) * NUM_REQS);
 
     wire [NUM_REQS-1:0] core_req_nc_sel;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_is_nc
         if (CACHE_ENABLE) begin : g_cache
-            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_IO];
+            assign core_req_nc_sel[i] = ~core_bus_in_if_req_data_flags[i][MEM_REQ_FLAG_IO];
         end else begin : g_no_cache
             assign core_req_nc_sel[i] = 1'b0;
         end
@@ -88,108 +113,92 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
 
     // TODO: Flatten this module
     VX_mem_switch #(
-        .NUM_INPUTS  (NUM_REQS),
-        .NUM_OUTPUTS ((CACHE_ENABLE ? 2 : 1) * NUM_REQS),
-        .DATA_SIZE   (WORD_SIZE),
-        .TAG_WIDTH   (CORE_TAG_WIDTH),
-        .ARBITER     ("R"),
-        .REQ_OUT_BUF (0),
-        .RSP_OUT_BUF (DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(CORE_OUT_BUF))
+        .NUM_INPUTS     (NUM_REQS),
+        .NUM_OUTPUTS    ((CACHE_ENABLE ? 2 : 1) * NUM_REQS),
+        .DATA_SIZE      (WORD_SIZE),
+        .TAG_WIDTH      (CORE_TAG_WIDTH),
+        .MEM_ADDR_WIDTH (CORE_ADDR_WIDTH + `CLOG2(WORD_SIZE)),
+        .FLAGS_WIDTH    (MEM_FLAGS_WIDTH),
+        .ARBITER        ("R"),
+        .REQ_OUT_BUF    (0),
+        .RSP_OUT_BUF    (DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(CORE_OUT_BUF))
     ) core_bus_nc_switch (
         .clk       (clk),
         .reset     (reset),
         .bus_sel   (core_req_nc_sel),
-        // flatten: .bus_in_if (core_bus_in_if),
-        `VX_MEM_BUS_PASS_SIGNALS(core_bus_in, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
-        // flatten: .bus_out_if(core_bus_nc_switch_if)
-        `VX_MEM_BUS_PASS_SIGNALS(core_bus_nc_switch, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+        // .bus_in_if (core_bus_in_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(bus_in_if, core_bus_in_if),
+        // .bus_out_if(core_bus_nc_switch_if)
+        `VX_MEM_BUS_IF_PASS_PORTS(bus_out_if, core_bus_nc_switch_if)
     );
 
-    // flatten: core_bus_in_nc_if
     // VX_mem_bus_if #(
     //     .DATA_SIZE (WORD_SIZE),
     //     .TAG_WIDTH (CORE_TAG_WIDTH)
     // ) core_bus_in_nc_if[NUM_REQS]();
-
-    `VX_MEM_BUS_SIGNALS(core_bus_in_nc, NUM_REQS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, CORE_TAG_WIDTH)
+    `VX_MEM_BUS_IF_SIGNALS_AW_N(core_bus_in_nc_if, WORD_SIZE, CORE_TAG_WIDTH, MEM_FLAGS_WIDTH, CORE_ADDR_WIDTH, NUM_REQS);
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_nc_switch_if
 
-        assign core_bus_in_nc_if[i].req_valid = core_bus_nc_switch_if[0 * NUM_REQS + i].req_valid;
-        assign core_bus_in_nc_if[i].req_data  = core_bus_nc_switch_if[0 * NUM_REQS + i].req_data;
-        assign core_bus_nc_switch_if[0 * NUM_REQS + i].req_ready = core_bus_in_nc_if[i].req_ready;
-
-        assign core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_valid = core_bus_in_nc_if[i].rsp_valid;
-        assign core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_data  = core_bus_in_nc_if[i].rsp_data;
-        assign core_bus_in_nc_if[i].rsp_ready = core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_ready;
+        `ASSIGN_VX_MEM_BUS_IF_FLAT_I(core_bus_in_nc_if, i, core_bus_nc_switch_if, i);
 
         if (CACHE_ENABLE) begin : g_cache
-            assign core_bus_out_if[i].req_valid = core_bus_nc_switch_if[1 * NUM_REQS + i].req_valid;
-            assign core_bus_out_if[i].req_data  = core_bus_nc_switch_if[1 * NUM_REQS + i].req_data;
-            assign core_bus_nc_switch_if[1 * NUM_REQS + i].req_ready = core_bus_out_if[i].req_ready;
+            `ASSIGN_VX_MEM_BUS_IF_FLAT_I(core_bus_out_if, i,core_bus_nc_switch_if, 1 * NUM_REQS + i);
 
-            assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_valid = core_bus_out_if[i].rsp_valid;
-            assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_data  = core_bus_out_if[i].rsp_data;
-            assign core_bus_out_if[i].rsp_ready = core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_ready;
         end else begin : g_no_cache
-            `INIT_VX_MEM_BUS_IF (core_bus_out_if[i])
+            `INIT_VX_MEM_BUS_IF_FLAT(core_bus_out_if, i);
         end
     end
 
     // handle memory requests /////////////////////////////////////////////////
 
-    // core_bus_nc_arb_if
     // VX_mem_bus_if #(
     //     .DATA_SIZE (WORD_SIZE),
     //     .TAG_WIDTH (MEM_TAG_NC1_WIDTH)
     // ) core_bus_nc_arb_if[MEM_PORTS]();
-
-    `VX_MEM_BUS_SIGNALS(core_bus_nc_arb, MEM_PORTS, ADDR_W, WORD_SIZE, FLAGS_W, UUID_W, MEM_TAG_NC1_WIDTH)
+    `VX_MEM_BUS_IF_SIGNALS_AW_N(core_bus_nc_arb_if, WORD_SIZE, MEM_TAG_NC1_WIDTH, MEM_FLAGS_WIDTH, CORE_ADDR_WIDTH, MEM_PORTS);
 
     VX_mem_arb #(
-        .NUM_INPUTS (NUM_REQS),
-        .NUM_OUTPUTS(MEM_PORTS),
-        .DATA_SIZE  (WORD_SIZE),
-        .TAG_WIDTH  (CORE_TAG_WIDTH),
-        .TAG_SEL_IDX(TAG_SEL_IDX),
-        .ARBITER    (CACHE_ENABLE ? "P" : "R"),
-        .REQ_OUT_BUF(0),
-        .RSP_OUT_BUF(0)
+        .NUM_INPUTS     (NUM_REQS),
+        .NUM_OUTPUTS    (MEM_PORTS),
+        .DATA_SIZE      (WORD_SIZE),
+        .TAG_WIDTH      (CORE_TAG_WIDTH),
+        .TAG_SEL_IDX    (TAG_SEL_IDX),
+        .MEM_ADDR_WIDTH (CORE_ADDR_WIDTH + `CLOG2(WORD_SIZE)),
+        .FLAGS_WIDTH    (MEM_FLAGS_WIDTH),
+        .ARBITER        (CACHE_ENABLE ? "P" : "R"),
+        .REQ_OUT_BUF    (0),
+        .RSP_OUT_BUF    (0)
     ) core_bus_nc_arb (
         .clk        (clk),
         .reset      (reset),
-
-        // flatten: .bus_in_if  (core_bus_in_nc_if),
-        `VX_MEM_BUS_PASS_SIGNALS(core_bus_in_nc, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
-
-        // flatten: .bus_out_if (core_bus_nc_arb_if)
-        `VX_MEM_BUS_PASS_SIGNALS(core_bus_nc_arb, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+        `VX_MEM_BUS_IF_PASS_PORTS(bus_in_if, core_bus_in_nc_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(bus_out_if, core_bus_nc_arb_if)
     );
 
-    // mem_bus_out_nc_if
     // VX_mem_bus_if #(
     //     .DATA_SIZE (LINE_SIZE),
     //     .TAG_WIDTH (MEM_TAG_NC2_WIDTH)
     // ) mem_bus_out_nc_if[MEM_PORTS]();
-
-    `VX_MEM_BUS_SIGNALS(mem_bus_out_nc, MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_NC2_WIDTH)
+    `VX_MEM_BUS_IF_SIGNALS_AW_N(mem_bus_out_nc_if, LINE_SIZE, MEM_TAG_NC2_WIDTH, MEM_FLAGS_WIDTH, MEM_ADDR_WIDTH, MEM_PORTS);
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc
-        wire                        core_req_nc_arb_rw;
-        wire [WORD_SIZE-1:0]        core_req_nc_arb_byteen;
-        wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_arb_addr;
-        wire [MEM_FLAGS_WIDTH-1:0] core_req_nc_arb_flags;
-        wire [CORE_DATA_WIDTH-1:0]  core_req_nc_arb_data;
+        wire                         core_req_nc_arb_rw;
+        wire [WORD_SIZE-1:0]         core_req_nc_arb_byteen;
+        wire [CORE_ADDR_WIDTH-1:0]   core_req_nc_arb_addr;
+        wire [MEM_FLAGS_WIDTH-1:0]   core_req_nc_arb_flags;
+        wire [CORE_DATA_WIDTH-1:0]   core_req_nc_arb_data;
         wire [MEM_TAG_NC1_WIDTH-1:0] core_req_nc_arb_tag;
 
-        assign {
-            core_req_nc_arb_rw,
-            core_req_nc_arb_addr,
-            core_req_nc_arb_data,
-            core_req_nc_arb_byteen,
-            core_req_nc_arb_flags,
-            core_req_nc_arb_tag
-        } = core_bus_nc_arb_if[i].req_data;
+        assign core_req_nc_arb_rw     = core_bus_nc_arb_if_req_data_rw[i];
+        assign core_req_nc_arb_addr   = core_bus_nc_arb_if_req_data_addr[i];
+        assign core_req_nc_arb_data   = core_bus_nc_arb_if_req_data_data[i];
+        assign core_req_nc_arb_byteen = core_bus_nc_arb_if_req_data_byteen[i];
+        assign core_req_nc_arb_flags  = core_bus_nc_arb_if_req_data_flags[i];
+        assign core_req_nc_arb_tag    = {
+            core_bus_nc_arb_if_req_data_tag_uuid[i],
+            core_bus_nc_arb_if_req_data_tag_value[i]
+        };
 
         logic [MEM_ADDR_WIDTH-1:0] core_req_nc_arb_addr_w;
         logic [WORDS_PER_LINE-1:0][WORD_SIZE-1:0] core_req_nc_arb_byteen_w;
@@ -198,15 +207,23 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         wire [MEM_TAG_NC2_WIDTH-1:0] core_req_nc_arb_tag_w;
         wire [MEM_TAG_NC1_WIDTH-1:0] core_rsp_nc_arb_tag_w;
 
+        wire [MEM_TAG_NC2_WIDTH-1:0] mem_bus_out_nc_rsp_tag = {
+            mem_bus_out_nc_if_rsp_data_tag_uuid[i],
+            mem_bus_out_nc_if_rsp_data_tag_value[i]
+        };
+
         if (WORDS_PER_LINE > 1) begin : g_multi_word_line
             wire [WSEL_BITS-1:0] rsp_wsel;
             wire [WSEL_BITS-1:0] req_wsel = core_req_nc_arb_addr[WSEL_BITS-1:0];
+
             always @(*) begin
                 core_req_nc_arb_byteen_w = '0;
                 core_req_nc_arb_byteen_w[req_wsel] = core_req_nc_arb_byteen;
-                core_req_nc_arb_data_w = 'x;
+
+                core_req_nc_arb_data_w = '0;
                 core_req_nc_arb_data_w[req_wsel] = core_req_nc_arb_data;
             end
+
             VX_bits_insert #(
                 .N   (MEM_TAG_NC1_WIDTH),
                 .S   (WSEL_BITS),
@@ -216,81 +233,92 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
                 .ins_in   (req_wsel),
                 .data_out (core_req_nc_arb_tag_w)
             );
+
             VX_bits_remove #(
                 .N   (MEM_TAG_NC2_WIDTH),
                 .S   (WSEL_BITS),
                 .POS (TAG_SEL_IDX)
             ) wsel_remove (
-                .data_in  (mem_bus_out_nc_if[i].rsp_data.tag),
+                .data_in  (mem_bus_out_nc_rsp_tag),
                 .sel_out  (rsp_wsel),
                 .data_out (core_rsp_nc_arb_tag_w)
             );
-            assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr[WSEL_BITS +: MEM_ADDR_WIDTH];
-            assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data[rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+
+            assign core_req_nc_arb_addr_w = core_req_nc_arb_addr[WSEL_BITS +: MEM_ADDR_WIDTH];
+
+            assign core_rsp_nc_arb_data_w =
+                mem_bus_out_nc_if_rsp_data_data[i][rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+
         end else begin : g_single_word_line
             assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr;
             assign core_req_nc_arb_byteen_w = core_req_nc_arb_byteen;
             assign core_req_nc_arb_data_w   = core_req_nc_arb_data;
             assign core_req_nc_arb_tag_w    = MEM_TAG_NC2_WIDTH'(core_req_nc_arb_tag);
 
-            assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data;
-            assign core_rsp_nc_arb_tag_w    = MEM_TAG_NC1_WIDTH'(mem_bus_out_nc_if[i].rsp_data.tag);
+            assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if_rsp_data_data[i];
+            assign core_rsp_nc_arb_tag_w    = MEM_TAG_NC1_WIDTH'(mem_bus_out_nc_rsp_tag);
         end
 
-        assign mem_bus_out_nc_if[i].req_valid = core_bus_nc_arb_if[i].req_valid;
-        assign mem_bus_out_nc_if[i].req_data = {
-            core_req_nc_arb_rw,
-            core_req_nc_arb_addr_w,
-            core_req_nc_arb_data_w,
-            core_req_nc_arb_byteen_w,
-            core_req_nc_arb_flags,
-            core_req_nc_arb_tag_w
-        };
-        assign core_bus_nc_arb_if[i].req_ready = mem_bus_out_nc_if[i].req_ready;
+        assign mem_bus_out_nc_if_req_valid[i]       = core_bus_nc_arb_if_req_valid[i];
+        assign mem_bus_out_nc_if_req_data_rw[i]     = core_req_nc_arb_rw;
+        assign mem_bus_out_nc_if_req_data_addr[i]   = core_req_nc_arb_addr_w;
+        assign mem_bus_out_nc_if_req_data_data[i]   = core_req_nc_arb_data_w;
+        assign mem_bus_out_nc_if_req_data_byteen[i] = core_req_nc_arb_byteen_w;
+        assign mem_bus_out_nc_if_req_data_flags[i]  = core_req_nc_arb_flags;
 
-        assign core_bus_nc_arb_if[i].rsp_valid = mem_bus_out_nc_if[i].rsp_valid;
-        assign core_bus_nc_arb_if[i].rsp_data = {
-            core_rsp_nc_arb_data_w,
-            core_rsp_nc_arb_tag_w
-        };
-        assign mem_bus_out_nc_if[i].rsp_ready = core_bus_nc_arb_if[i].rsp_ready;
+        assign {
+            mem_bus_out_nc_if_req_data_tag_uuid[i],
+            mem_bus_out_nc_if_req_data_tag_value[i]
+        } = core_req_nc_arb_tag_w;
+
+        assign core_bus_nc_arb_if_req_ready[i] = mem_bus_out_nc_if_req_ready[i];
+
+        assign core_bus_nc_arb_if_rsp_valid[i]     = mem_bus_out_nc_if_rsp_valid[i];
+        assign core_bus_nc_arb_if_rsp_data_data[i] = core_rsp_nc_arb_data_w;
+
+        assign {
+            core_bus_nc_arb_if_rsp_data_tag_uuid[i],
+            core_bus_nc_arb_if_rsp_data_tag_value[i]
+        } = core_rsp_nc_arb_tag_w;
+
+        assign mem_bus_out_nc_if_rsp_ready[i] = core_bus_nc_arb_if_rsp_ready[i];
     end
 
-    // mem_bus_out_src_if
     // VX_mem_bus_if #(
     //     .DATA_SIZE (LINE_SIZE),
     //     .TAG_WIDTH (MEM_TAG_OUT_WIDTH)
     // ) mem_bus_out_src_if[(CACHE_ENABLE ? 2 : 1) * MEM_PORTS]();
-
-    `VX_MEM_BUS_SIGNALS(mem_bus_out_src, (CACHE_ENABLE ? 2 : 1) * MEM_PORTS, ADDR_W, LINE_SIZE, FLAGS_W, UUID_W, MEM_TAG_OUT_WIDTH)
+    `VX_MEM_BUS_IF_SIGNALS_AW_N(mem_bus_out_src_if, LINE_SIZE, MEM_TAG_OUT_WIDTH, MEM_FLAGS_WIDTH, MEM_ADDR_WIDTH, (CACHE_ENABLE ? 2 : 1) * MEM_PORTS);
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_src
-        `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[0 * MEM_PORTS + i], mem_bus_out_nc_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_NC2_WIDTH, UUID_WIDTH);
+        // `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[0 * MEM_PORTS + i], mem_bus_out_nc_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_NC2_WIDTH, UUID_WIDTH);
+        `ASSIGN_VX_MEM_BUS_IF_EX_FLAT_I(mem_bus_out_src_if, 0 * MEM_PORTS + i, mem_bus_out_nc_if, i, MEM_TAG_OUT_WIDTH, MEM_TAG_NC2_WIDTH, UUID_WIDTH);
         if (CACHE_ENABLE) begin : g_cache
-            `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[1 * MEM_PORTS + i], mem_bus_in_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_IN_WIDTH, UUID_WIDTH);
+            // `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[1 * MEM_PORTS + i], mem_bus_in_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_IN_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX_FLAT_I(mem_bus_out_src_if, 1 * MEM_PORTS + i, mem_bus_in_if, i, MEM_TAG_OUT_WIDTH, MEM_TAG_IN_WIDTH, UUID_WIDTH);
         end else begin : g_no_cache
-            `UNUSED_VX_MEM_BUS_IF(mem_bus_in_if[i])
+            // `UNUSED_VX_MEM_BUS_IF(mem_bus_in_if[i])
+            `UNUSED_VX_MEM_BUS_IF_FLAT(mem_bus_in_if, i);
         end
     end
 
     
     VX_mem_arb #(
-        .NUM_INPUTS ((CACHE_ENABLE ? 2 : 1) * MEM_PORTS),
-        .NUM_OUTPUTS(MEM_PORTS),
-        .DATA_SIZE  (LINE_SIZE),
-        .TAG_WIDTH  (MEM_TAG_OUT_WIDTH),
-        .ARBITER    ("R"),
-        .REQ_OUT_BUF(DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
-        .RSP_OUT_BUF(0)
+        .NUM_INPUTS     ((CACHE_ENABLE ? 2 : 1) * MEM_PORTS),
+        .NUM_OUTPUTS    (MEM_PORTS),
+        .DATA_SIZE      (LINE_SIZE),
+        .TAG_WIDTH      (MEM_TAG_OUT_WIDTH),
+        .TAG_SEL_IDX    (TAG_SEL_IDX),
+        .MEM_ADDR_WIDTH (MEM_ADDR_WIDTH + `CLOG2(LINE_SIZE)),
+        .FLAGS_WIDTH    (MEM_FLAGS_WIDTH),
+        .ARBITER        ("R"),
+        .REQ_OUT_BUF    (DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
+        .RSP_OUT_BUF    (0)
     ) mem_bus_out_arb (
         .clk        (clk),
         .reset      (reset),
-
-        // flatten: .bus_in_if  (mem_bus_out_src_if),
-        `VX_MEM_BUS_PASS_SIGNALS(mem_bus_out_src, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W),
-
-        // flatten: .bus_out_if (mem_bus_out_if)
-        `VX_MEM_BUS_PASS_SIGNALS(mem_bus_out, N, ADDR_W, DATA_SIZE, FLAGS_W, UUID_W, TAG_W)
+        `VX_MEM_BUS_IF_PASS_PORTS(bus_in_if, mem_bus_out_src_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(bus_out_if, mem_bus_out_if)
     );
 
 endmodule

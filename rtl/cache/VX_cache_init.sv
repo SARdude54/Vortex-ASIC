@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_cache_define.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_cache_init import VX_gpu_pkg::*; #(
     // Number of Word requests per cycle
@@ -21,18 +22,21 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     // core request tag size
     parameter TAG_WIDTH = UUID_WIDTH + 1,
     // Bank select latency
-    parameter BANK_SEL_LATENCY = 1
+    parameter BANK_SEL_LATENCY = 1,
+
+    parameter WORD_SIZE = 16
 ) (
     input wire              clk,
     input wire              reset,
-    VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
-    VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
+    // VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
+    `VX_MEM_BUS_IF_CONSUMER_PORTS_N(core_bus_in_if, WORD_SIZE, TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, NUM_REQS),
+    // VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(core_bus_out_if, WORD_SIZE, TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, NUM_REQS),
     input wire [NUM_BANKS-1:0] bank_req_fire,
     output wire [NUM_BANKS-1:0] flush_begin,
     output wire [`UP(UUID_WIDTH)-1:0] flush_uuid,
     input wire [NUM_BANKS-1:0] flush_end
 );
-    `UNUSED_PARAM (TAG_WIDTH)
 
     localparam STATE_IDLE  = 0;
     localparam STATE_WAIT1 = 1;
@@ -53,7 +57,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
         wire [NUM_REQS-1:0] core_bus_out_fire;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_fire
-            assign core_bus_out_fire[i] = core_bus_out_if[i].req_valid && core_bus_out_if[i].req_ready;
+            assign core_bus_out_fire[i] = core_bus_out_if_req_valid[i] && core_bus_out_if_req_ready[i];
         end
 
         wire [NUM_REQS_W-1:0] core_bus_out_cnt;
@@ -88,7 +92,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
     wire [NUM_REQS-1:0] flush_req_mask;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_req_mask
-        assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_FLUSH];
+        assign flush_req_mask[i] = core_bus_in_if_req_valid[i] && core_bus_in_if_req_data_flags[i][MEM_REQ_FLAG_FLUSH];
     end
     wire flush_req_enable = (| flush_req_mask);
 
@@ -97,29 +101,41 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_req
         wire input_enable = ~flush_req_enable || lock_released[i];
-        assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && input_enable;
-        assign core_bus_out_if[i].req_data  = core_bus_in_if[i].req_data;
-        assign core_bus_in_if[i].req_ready  = core_bus_out_if[i].req_ready && input_enable;
+        assign core_bus_out_if_req_valid[i] = core_bus_in_if_req_valid[i] && input_enable;
+
+        assign core_bus_out_if_req_data_rw[i]         = core_bus_in_if_req_data_rw[i];
+        assign core_bus_out_if_req_data_addr[i]       = core_bus_in_if_req_data_addr[i];
+        assign core_bus_out_if_req_data_data[i]       = core_bus_in_if_req_data_data[i];
+        assign core_bus_out_if_req_data_byteen[i]     = core_bus_in_if_req_data_byteen[i];
+        assign core_bus_out_if_req_data_flags[i]      = core_bus_in_if_req_data_flags[i];
+        assign core_bus_out_if_req_data_tag_uuid[i]   = core_bus_in_if_req_data_tag_uuid[i];
+        assign core_bus_out_if_req_data_tag_value[i]  = core_bus_in_if_req_data_tag_value[i];
+
+        assign core_bus_in_if_req_ready[i] = core_bus_out_if_req_ready[i] && input_enable;
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_in_rsp
-        assign core_bus_in_if[i].rsp_valid  = core_bus_out_if[i].rsp_valid;
-        assign core_bus_in_if[i].rsp_data   = core_bus_out_if[i].rsp_data;
-        assign core_bus_out_if[i].rsp_ready = core_bus_in_if[i].rsp_ready;
+        assign core_bus_in_if_rsp_valid[i] = core_bus_out_if_rsp_valid[i];
+
+        assign core_bus_in_if_rsp_data_data[i]      = core_bus_out_if_rsp_data_data[i];
+        assign core_bus_in_if_rsp_data_tag_uuid[i]  = core_bus_out_if_rsp_data_tag_uuid[i];
+        assign core_bus_in_if_rsp_data_tag_value[i] = core_bus_out_if_rsp_data_tag_value[i];
+
+        assign core_bus_out_if_rsp_ready[i] = core_bus_in_if_rsp_ready[i];
     end
 
     reg [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] core_bus_out_uuid;
     wire [NUM_REQS-1:0] core_bus_out_ready;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_uuid
         if (UUID_WIDTH != 0) begin : g_uuid
-            assign core_bus_out_uuid[i] = core_bus_in_if[i].req_data.tag.uuid;
+            assign core_bus_out_uuid[i] = core_bus_in_if_req_data_tag_uuid[i];
         end else begin : g_no_uuid
             assign core_bus_out_uuid[i] = 0;
         end
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_ready
-        assign core_bus_out_ready[i] = core_bus_out_if[i].req_ready;
+        assign core_bus_out_ready[i] = core_bus_out_if_req_ready[i];
     end
 
     always @(*) begin

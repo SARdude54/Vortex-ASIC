@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 `include "VX_define.vh"
+`include "VX_mem_bus_if.vh"
 
 
 module TB_VX_Top;
@@ -37,6 +38,22 @@ module TB_VX_Top;
     // Output
     logic busy;
 
+    // Memory Bus Interface
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (`L1_LINE_SIZE),
+    //     .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+    // ) socket_mem_bus_if[`L1_MEM_PORTS]();   
+    `VX_MEM_BUS_IF_SIGNALS_N(tb_mem_bus_if, `L1_LINE_SIZE, L1_MEM_ARB_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `L1_MEM_PORTS);
+
+    // tie off memory
+    for (genvar i = 0; i < `L1_MEM_PORTS; ++i) begin : g_mem_tieoff
+        assign tb_mem_bus_if_req_ready[i]              = 1'b1;
+        assign tb_mem_bus_if_rsp_valid[i]              = 1'b0;
+        assign tb_mem_bus_if_rsp_data_data[i]          = '0;
+        assign tb_mem_bus_if_rsp_data_tag_uuid[i]      = '0;
+        assign tb_mem_bus_if_rsp_data_tag_value[i]     = '0;
+    end
+
 
     // Instantiate Wrapper
     VX_top #(
@@ -51,22 +68,8 @@ module TB_VX_Top;
         .dcr_bus_if_write_addr(write_addr),
         .dcr_bus_if_write_data(write_data),
 
-        .mem_req_ready(mem_req_ready),
-        .mem_req_valid(mem_req_valid),
-        .mem_req_rw(mem_req_rw),     
-        .mem_req_addr(mem_req_addr),   
-        .mem_req_data(mem_req_data),   
-        .mem_req_byteen(mem_req_byteen), 
-        .mem_req_flags(mem_req_flags),  
-        .mem_req_tag_uuid(mem_req_tag_uuid),  
-        .mem_req_tag_value(mem_req_tag_value),
-
-        .mem_rsp_valid(mem_rsp_valid),
-        .mem_rsp_ready(mem_rsp_ready),
-        .mem_rsp_data(mem_rsp_data),
-        .mem_rsp_tag_uuid(mem_rsp_tag_uuid),
-        .mem_rsp_tag_value(mem_rsp_tag_value),
-        .mem_rsp_valid(mem_rsp_valid),
+        // .mem_bus_if(socket_mem_bus_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, tb_mem_bus_if),
 
         .busy(busy)
     );
@@ -75,27 +78,24 @@ module TB_VX_Top;
     initial clk = 0;
     always #5 clk = ~clk;
 
-
     initial begin
         $dumpfile("wave.vcd");
         $dumpvars(0, TB_VX_Top);
     end
 
     initial begin
-        write_valid = 0;
-        write_data = '0;
-        write_addr = '0;
+        write_valid = 1'b0;
+        write_addr  = '0;
+        write_data  = '0;
     end
 
-    
     initial begin
-        reset = 0;
+        // Vortex reset is usually active-high.
+        reset = 1'b1;
+        repeat (5) @(posedge clk);
+        reset = 1'b0;
 
-        #20 reset = 1;
-        @(posedge clk);
-
-        
-        #50;
+        repeat (20) @(posedge clk);
         $finish;
     end
 

@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_mem_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -25,8 +26,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
-    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
+    // VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(dcache_bus_if, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, DCACHE_NUM_REQS)
 );
+
+    `STATIC_ASSERT(DCACHE_NUM_REQS == (`NUM_LSU_BLOCKS * DCACHE_CHANNELS), ("invalid dcache request geometry"))
+    
     VX_lsu_mem_if #(
         .NUM_LANES (`NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
@@ -84,10 +89,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .bus_out_if (lmem_arb_if)
     );
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) lmem_adapt_if[`NUM_LSU_LANES]();
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (LSU_WORD_SIZE),
+    //     .TAG_WIDTH (LMEM_TAG_WIDTH)
+    // ) lmem_adapt_if[`NUM_LSU_LANES]();
+
+    `VX_MEM_BUS_IF_SIGNALS_N(lmem_adapt_if, LSU_WORD_SIZE, LMEM_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_LANES);
 
     VX_lsu_adapter #(
         .NUM_LANES    (`NUM_LSU_LANES),
@@ -101,7 +108,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .lsu_mem_if (lmem_arb_if[0]),
-        .mem_bus_if (lmem_adapt_if)
+        // .mem_bus_if (lmem_adapt_if)
+        `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, lmem_adapt_if)
     );
 
     VX_local_mem #(
@@ -119,7 +127,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .lmem_perf  (lmem_perf),
     `endif
-        .mem_bus_if (lmem_adapt_if)
+        // .mem_bus_if (lmem_adapt_if)
+        `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, lmem_adapt_if)
     );
 
 `else
@@ -229,10 +238,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
 
-        VX_mem_bus_if #(
-            .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_TAG_WIDTH)
-        ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
+        // VX_mem_bus_if #(
+        //     .DATA_SIZE (DCACHE_WORD_SIZE),
+        //     .TAG_WIDTH (DCACHE_TAG_WIDTH)
+        // ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
+        `VX_MEM_BUS_IF_SIGNALS_N(dcache_bus_tmp_if, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, DCACHE_CHANNELS);
 
         VX_lsu_adapter #(
             .NUM_LANES    (DCACHE_CHANNELS),
@@ -246,11 +256,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .lsu_mem_if (dcache_coalesced_if[i]),
-            .mem_bus_if (dcache_bus_tmp_if)
+            // .mem_bus_if (dcache_bus_tmp_if)
+            `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, dcache_bus_tmp_if)
         );
 
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j]);
+            `ASSIGN_VX_MEM_BUS_IF_FLAT_I (dcache_bus_if, i * DCACHE_CHANNELS + j, dcache_bus_tmp_if, j);
         end
 
     end

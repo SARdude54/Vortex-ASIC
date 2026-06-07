@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_local_mem import VX_gpu_pkg::*; #(
     parameter `STRING  INSTANCE_ID = "",
@@ -43,7 +44,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     output lmem_perf_t lmem_perf,
 `endif
 
-    VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
+    // VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
+    `VX_MEM_BUS_IF_CONSUMER_PORTS_N(mem_bus_if, WORD_SIZE, TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, NUM_REQS)
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -57,6 +59,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     localparam BANK_SEL_WIDTH  = `UP(BANK_SEL_BITS);
     localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH;
     localparam RSP_DATAW       = WORD_WIDTH + TAG_WIDTH;
+    localparam UUID_BITS = `UP(UUID_WIDTH);
+    localparam TAG_VALUE_BITS = TAG_WIDTH - UUID_BITS;
+
+    `STATIC_ASSERT(TAG_VALUE_BITS > 0, ("invalid tag value width"))
 
     `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
@@ -65,7 +71,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
     if (NUM_BANKS > 1) begin : g_req_bank_idx
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_idxs
-            assign req_bank_idx[i] = mem_bus_if[i].req_data.addr[0 +: BANK_SEL_BITS];
+            assign req_bank_idx[i] = mem_bus_if_req_data_addr[i][0 +: BANK_SEL_BITS];
         end
     end else begin : g_req_bank_idx_0
         assign req_bank_idx = 0;
@@ -75,8 +81,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_addr
-        assign req_bank_addr[i] = mem_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-        `UNUSED_VAR (mem_bus_if[i].req_data.flags)
+        assign req_bank_addr[i] = mem_bus_if_req_data_addr[i][BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+        `UNUSED_VAR (mem_bus_if_req_data_flags[i])
     end
 
     // bank requests dispatch
@@ -101,15 +107,16 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 `endif
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_data_in
-        assign req_valid_in[i] = mem_bus_if[i].req_valid;
+        assign req_valid_in[i] = mem_bus_if_req_valid[i];
         assign req_data_in[i] = {
-            mem_bus_if[i].req_data.rw,
+            mem_bus_if_req_data_rw[i],
             req_bank_addr[i],
-            mem_bus_if[i].req_data.data,
-            mem_bus_if[i].req_data.byteen,
-            mem_bus_if[i].req_data.tag
+            mem_bus_if_req_data_data[i],
+            mem_bus_if_req_data_byteen[i],
+            mem_bus_if_req_data_tag_uuid[i],
+            mem_bus_if_req_data_tag_value[i]
         };
-        assign mem_bus_if[i].req_ready = req_ready_in[i];
+        assign mem_bus_if_req_ready[i] = req_ready_in[i];
     end
 
     VX_stream_xbar #(
@@ -240,9 +247,15 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     );
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_mem_bus_if
-        assign mem_bus_if[i].rsp_valid = rsp_valid_out[i];
-        assign mem_bus_if[i].rsp_data  = rsp_data_out[i];
-        assign rsp_ready_out[i] = mem_bus_if[i].rsp_ready;
+        assign mem_bus_if_rsp_valid[i] = rsp_valid_out[i];
+
+        assign {
+            mem_bus_if_rsp_data_data[i],
+            mem_bus_if_rsp_data_tag_uuid[i],
+            mem_bus_if_rsp_data_tag_value[i]
+        } = rsp_data_out[i];
+
+        assign rsp_ready_out[i] = mem_bus_if_rsp_ready[i];
     end
 
 `ifdef PERF_ENABLE
@@ -253,7 +266,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_REQS-1:0] req_rw;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_rw
-        assign req_rw[i] = mem_bus_if[i].req_data.rw;
+        assign req_rw[i] = mem_bus_if_req_data_rw[i];
     end
 
     wire [NUM_REQS-1:0] perf_reads_per_req, perf_writes_per_req;
@@ -291,18 +304,18 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_MEM
 
-    wire [NUM_BANKS-1:0][TAG_WIDTH-UUID_WIDTH-1:0] per_bank_req_tag_value;
-    wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_req_uuid;
+    wire [NUM_BANKS-1:0][TAG_VALUE_BITS-1:0] per_bank_req_tag_value;
+    wire [NUM_BANKS-1:0][UUID_BITS-1:0] per_bank_req_uuid;
 
-    wire [NUM_BANKS-1:0][TAG_WIDTH-UUID_WIDTH-1:0] per_bank_rsp_tag_value;
-    wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_rsp_uuid;
+    wire [NUM_BANKS-1:0][TAG_VALUE_BITS-1:0] per_bank_rsp_tag_value;
+    wire [NUM_BANKS-1:0][UUID_BITS-1:0] per_bank_rsp_uuid;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_uuid
-        assign per_bank_req_tag_value[i] = per_bank_req_tag[i][TAG_WIDTH-UUID_WIDTH-1:0];
-        assign per_bank_rsp_tag_value[i] = per_bank_rsp_tag[i][TAG_WIDTH-UUID_WIDTH-1:0];
+        assign per_bank_req_tag_value[i] = per_bank_req_tag[i][TAG_VALUE_BITS-1:0];
+        assign per_bank_rsp_tag_value[i] = per_bank_rsp_tag[i][TAG_VALUE_BITS-1:0];
         if (UUID_WIDTH != 0) begin : g_uuid
-            assign per_bank_req_uuid[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
-            assign per_bank_rsp_uuid[i] = per_bank_rsp_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
+            assign per_bank_req_uuid[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_BITS];
+            assign per_bank_rsp_uuid[i] = per_bank_rsp_tag[i][TAG_WIDTH-1 -: UUID_BITS];
         end else begin : g_no_uuid
             assign per_bank_req_uuid[i] = 0;
             assign per_bank_rsp_uuid[i] = 0;
@@ -311,18 +324,18 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_trace
         always @(posedge clk) begin
-            if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
-                if (mem_bus_if[i].req_data.rw) begin
+            if (mem_bus_if_req_valid[i] && mem_bus_if_req_ready[i]) begin
+                if (mem_bus_if_req_data_rw[i]) begin
                     `TRACE(2, ("%t: %s core-wr-req[%0d]: addr=0x%0h, byteen=0x%h, data=0x%h, tag=0x%0h (#%0d)\n",
-                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
+                        $time, INSTANCE_ID, i, mem_bus_if_req_data_addr[i], mem_bus_if_req_data_byteen[i], mem_bus_if_req_data_data[i], mem_bus_if_req_data_tag_value[i], mem_bus_if_req_data_tag_uuid[i]))
                 end else begin
                     `TRACE(2, ("%t: %s core-rd-req[%0d]: addr=0x%0h, tag=0x%0h (#%0d)\n",
-                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
+                        $time, INSTANCE_ID, i, mem_bus_if_req_data_addr[i], mem_bus_if_req_data_tag_value[i], mem_bus_if_req_data_tag_uuid[i]))
                 end
             end
-            if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
+            if (mem_bus_if_rsp_valid[i] && mem_bus_if_rsp_ready[i]) begin
                 `TRACE(2, ("%t: %s core-rd-rsp[%0d]: data=0x%h, tag=0x%0h (#%0d)\n",
-                    $time, INSTANCE_ID, i, mem_bus_if[i].rsp_data.data, mem_bus_if[i].rsp_data.tag.value, mem_bus_if[i].rsp_data.tag.uuid))
+                    $time, INSTANCE_ID, i, mem_bus_if_rsp_data_data[i], mem_bus_if_rsp_data_tag_value[i], mem_bus_if_rsp_data_tag_uuid[i]))
             end
         end
     end

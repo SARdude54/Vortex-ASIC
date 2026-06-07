@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_schedule_if.vh"
 `include "VX_fetch_if.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_fetch import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -24,7 +25,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     input  wire             reset,
 
     // Icache interface
-    VX_mem_bus_if.master    icache_bus_if,
+    // VX_mem_bus_if.master    icache_bus_if,
+    `VX_MEM_BUS_IF_PRODUCER_PORTS(icache_bus_if, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH),
 
     // inputs
     // flatten: VX_schedule_if.master   schedule_if,
@@ -42,14 +44,16 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
     wire icache_req_ready;
 
-    wire [UUID_WIDTH-1:0] rsp_uuid;
     wire [NW_WIDTH-1:0] req_tag, rsp_tag;
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
 
     assign req_tag = schedule_if_data.wid;
 
-    assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
+    wire [`UP(UUID_WIDTH)-1:0] rsp_uuid;
+
+    assign rsp_uuid = icache_bus_if_rsp_data_tag_uuid;
+    assign rsp_tag  = icache_bus_if_rsp_data_tag_value;
 
     wire [PC_BITS-1:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
@@ -106,6 +110,9 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign icache_req_tag   = {schedule_if_data.uuid, req_tag};
     assign schedule_if_ready = icache_req_ready && ibuf_ready;
 
+    wire [ICACHE_ADDR_WIDTH-1:0] req_buf_addr;
+    wire [ICACHE_TAG_WIDTH-1:0]  req_buf_tag;
+
     VX_elastic_buffer #(
         .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
         .SIZE    (2),
@@ -116,32 +123,39 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .valid_in  (icache_req_valid),
         .ready_in  (icache_req_ready),
         .data_in   ({icache_req_addr, icache_req_tag}),
-        .data_out  ({icache_bus_if.req_data.addr, icache_bus_if.req_data.tag}),
-        .valid_out (icache_bus_if.req_valid),
-        .ready_out (icache_bus_if.req_ready)
+        .data_out  ({req_buf_addr, req_buf_tag}),
+        .valid_out (icache_bus_if_req_valid),
+        .ready_out (icache_bus_if_req_ready)
     );
 
-    assign icache_bus_if.req_data.flags  = '0;
-    assign icache_bus_if.req_data.rw     = 0;
-    assign icache_bus_if.req_data.byteen = '1;
-    assign icache_bus_if.req_data.data   = '0;
+    assign icache_bus_if_req_data_addr = req_buf_addr;
+
+    assign {
+        icache_bus_if_req_data_tag_uuid,
+        icache_bus_if_req_data_tag_value
+    } = req_buf_tag;
+
+    assign icache_bus_if_req_data_flags  = '0;
+    assign icache_bus_if_req_data_rw     = 1'b0;
+    assign icache_bus_if_req_data_byteen = '1;
+    assign icache_bus_if_req_data_data   = '0;
 
     // Icache Response
 
-    assign fetch_if_valid = icache_bus_if.rsp_valid;
+    assign fetch_if_valid = icache_bus_if_rsp_valid;
     assign fetch_if_data.tmask = rsp_tmask;
     assign fetch_if_data.wid   = rsp_tag;
     assign fetch_if_data.PC    = rsp_PC;
-    assign fetch_if_data.instr = icache_bus_if.rsp_data.data;
+    assign fetch_if_data.instr = icache_bus_if_rsp_data_data;
     assign fetch_if_data.uuid  = rsp_uuid;
-    assign icache_bus_if.rsp_ready = fetch_if_ready;
+    assign icache_bus_if_rsp_ready = fetch_if_ready;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH
     `SCOPE_IO_SWITCH (1);
     wire schedule_fire = schedule_if_valid && schedule_if_ready;
-    wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
-    wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    wire icache_bus_req_fire = icache_bus_if_req_valid && icache_bus_if_req_ready;
+    wire icache_bus_rsp_fire = icache_bus_if_rsp_valid && icache_bus_if_rsp_ready;
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 1, 6, 3, (
@@ -151,18 +165,18 @@ module VX_fetch import VX_gpu_pkg::*; #(
         ), {
             schedule_if_valid,
             schedule_if_ready,
-            icache_bus_if.req_valid,
-            icache_bus_if.req_ready,
-            icache_bus_if.rsp_valid,
-            icache_bus_if.rsp_ready
+            icache_bus_if_req_valid,
+            icache_bus_if_req_ready,
+            icache_bus_if_rsp_valid,
+            icache_bus_if_rsp_ready
         }, {
             schedule_fire,
             icache_bus_req_fire,
             icache_bus_rsp_fire
         },{
             schedule_if_data.uuid, schedule_if_data.wid, schedule_if_data.tmask, schedule_if_data.PC,
-            icache_bus_if.req_data.tag.uuid, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
-            icache_bus_if.rsp_data.tag.uuid, icache_bus_if.rsp_data.data
+            icache_bus_if_req_data_tag_uuid, icache_bus_if_req_data_byteen, icache_bus_if_req_data_addr,
+            icache_bus_if_rsp_data_tag_uuid, icache_bus_if_rsp_data_data
         },
         reset_negedge, 1'b0, 4096
     );
@@ -176,8 +190,24 @@ module VX_fetch import VX_gpu_pkg::*; #(
     ila_fetch ila_fetch_inst (
         .clk    (clk),
         .probe0 ({schedule_if_valid, schedule_if_data, schedule_if_ready}),
-        .probe1 ({icache_bus_if.req_valid, icache_bus_if.req_data, icache_bus_if.req_ready}),
-        .probe2 ({icache_bus_if.rsp_valid, icache_bus_if.rsp_data, icache_bus_if.rsp_ready})
+        .probe1 ({
+            icache_bus_if_req_valid,
+            icache_bus_if_req_data_rw,
+            icache_bus_if_req_data_addr,
+            icache_bus_if_req_data_data,
+            icache_bus_if_req_data_byteen,
+            icache_bus_if_req_data_flags,
+            icache_bus_if_req_data_tag_uuid,
+            icache_bus_if_req_data_tag_value,
+            icache_bus_if_req_ready
+        }),
+        .probe2 ({
+            icache_bus_if_rsp_valid,
+            icache_bus_if_rsp_data_data,
+            icache_bus_if_rsp_data_tag_uuid,
+            icache_bus_if_rsp_data_tag_value,
+            icache_bus_if_rsp_ready
+        })
     );
 `endif
 `endif
