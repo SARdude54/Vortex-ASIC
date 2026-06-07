@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_mem_bus_if.vh"
+`include "VX_lsu_mem_if.vh"
 
 module VX_mem_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -25,18 +26,20 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     output coalescer_perf_t coalescer_perf,
 `endif
 
-    VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
+    // VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
+    `VX_LSU_MEM_IF_CONSUMER_PORTS_N(lsu_mem_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS),
     // VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
     `VX_MEM_BUS_IF_PRODUCER_PORTS_N(dcache_bus_if, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, DCACHE_NUM_REQS)
 );
 
     `STATIC_ASSERT(DCACHE_NUM_REQS == (`NUM_LSU_BLOCKS * DCACHE_CHANNELS), ("invalid dcache request geometry"))
     
-    VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_dcache_if[`NUM_LSU_BLOCKS]();
+    // VX_lsu_mem_if #(
+    //     .NUM_LANES (`NUM_LSU_LANES),
+    //     .DATA_SIZE (LSU_WORD_SIZE),
+    //     .TAG_WIDTH (LSU_TAG_WIDTH)
+    // ) lsu_dcache_if[`NUM_LSU_BLOCKS]();
+    `VX_LSU_MEM_IF_SIGNALS_N(lsu_dcache_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS);
 
 `ifdef LMEM_ENABLE
 
@@ -45,11 +48,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
+    // VX_lsu_mem_if #(
+    //     .NUM_LANES (`NUM_LSU_LANES),
+    //     .DATA_SIZE (LSU_WORD_SIZE),
+    //     .TAG_WIDTH (LSU_TAG_WIDTH)
+    // ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
+    `VX_LSU_MEM_IF_SIGNALS_N(lsu_lmem_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS);
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
         VX_lmem_switch #(
@@ -60,17 +64,21 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         ) lmem_switch (
             .clk          (clk),
             .reset        (reset),
-            .lsu_in_if    (lsu_mem_if[i]),
-            .global_out_if(lsu_dcache_if[i]),
-            .local_out_if (lsu_lmem_if[i])
+            // .lsu_in_if    (lsu_mem_if[i]),
+            `VX_LSU_MEM_IF_PASS_PORTS_I(lsu_in_if, lsu_mem_if, i),
+            // .global_out_if(lsu_dcache_if[i]),
+            `VX_LSU_MEM_IF_PASS_PORTS_I(global_out_if, lsu_dcache_if, i),
+            // .local_out_if (lsu_lmem_if[i])
+            `VX_LSU_MEM_IF_PASS_PORTS_I(local_out_if, lsu_lmem_if, i)
         );
     end
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) lmem_arb_if[1]();
+    // VX_lsu_mem_if #(
+    //     .NUM_LANES (`NUM_LSU_LANES),
+    //     .DATA_SIZE (LSU_WORD_SIZE),
+    //     .TAG_WIDTH (LMEM_TAG_WIDTH)
+    // ) lmem_arb_if[1]();
+    `VX_LSU_MEM_IF_SIGNALS_N(lmem_arb_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LMEM_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, 1);
 
     VX_lsu_mem_arb #(
         .NUM_INPUTS (`NUM_LSU_BLOCKS),
@@ -78,6 +86,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .NUM_LANES  (`NUM_LSU_LANES),
         .DATA_SIZE  (LSU_WORD_SIZE),
         .TAG_WIDTH  (LSU_TAG_WIDTH),
+        .OUT_TAG_WIDTH (LMEM_TAG_WIDTH),
         .TAG_SEL_IDX(0),
         .ARBITER    ("R"),
         .REQ_OUT_BUF(0),
@@ -85,8 +94,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     ) lmem_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (lsu_lmem_if),
-        .bus_out_if (lmem_arb_if)
+        // .bus_in_if  (lsu_lmem_if),
+        `VX_LSU_MEM_IF_PASS_PORTS(bus_in_if, lsu_lmem_if),
+        // .bus_out_if (lmem_arb_if)
+        `VX_LSU_MEM_IF_PASS_PORTS(bus_out_if, lmem_arb_if)
     );
 
     // VX_mem_bus_if #(
@@ -107,7 +118,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     ) lmem_adapter (
         .clk        (clk),
         .reset      (reset),
-        .lsu_mem_if (lmem_arb_if[0]),
+        // .lsu_mem_if (lmem_arb_if[0]),
+        `VX_LSU_MEM_IF_PASS_PORTS_I(lsu_mem_if, lmem_arb_if, 0),
         // .mem_bus_if (lmem_adapt_if)
         `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, lmem_adapt_if)
     );
@@ -138,16 +150,18 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 `endif
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
-        `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
+        // `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
+        `ASSIGN_VX_LSU_MEM_IF_FLAT_I(lsu_dcache_if, i, lsu_mem_if, i);
     end
 
 `endif
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (DCACHE_CHANNELS),
-        .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
+    // VX_lsu_mem_if #(
+    //     .NUM_LANES (DCACHE_CHANNELS),
+    //     .DATA_SIZE (DCACHE_WORD_SIZE),
+    //     .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    // ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
+    `VX_LSU_MEM_IF_SIGNALS_N(dcache_coalesced_if, DCACHE_CHANNELS, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS);
 
 `ifdef PERF_ENABLE
     wire [`NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
@@ -166,6 +180,33 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     if ((`NUM_LSU_LANES > 1) && (LSU_WORD_SIZE != DCACHE_WORD_SIZE)) begin : g_enabled
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+
+            wire [LSU_TAG_WIDTH-1:0] lsu_dcache_req_tag;
+            wire [LSU_TAG_WIDTH-1:0] lsu_dcache_rsp_tag;
+
+            assign lsu_dcache_req_tag = {
+                lsu_dcache_if_req_data_tag_uuid[i],
+                lsu_dcache_if_req_data_tag_value[i]
+            };
+
+            assign {
+                lsu_dcache_if_rsp_data_tag_uuid[i],
+                lsu_dcache_if_rsp_data_tag_value[i]
+            } = lsu_dcache_rsp_tag;
+
+            wire [DCACHE_TAG_WIDTH-1:0] dcache_coalesced_req_tag;
+            wire [DCACHE_TAG_WIDTH-1:0] dcache_coalesced_rsp_tag;
+
+            assign {
+                dcache_coalesced_if_req_data_tag_uuid[i],
+                dcache_coalesced_if_req_data_tag_value[i]
+            } = dcache_coalesced_req_tag;
+
+            assign dcache_coalesced_rsp_tag = {
+                dcache_coalesced_if_rsp_data_tag_uuid[i],
+                dcache_coalesced_if_rsp_data_tag_value[i]
+            };
+
             VX_mem_coalescer #(
                 .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
                 .NUM_REQS       (`NUM_LSU_LANES),
@@ -188,47 +229,48 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             `endif
 
                 // Input request
-                .in_req_valid   (lsu_dcache_if[i].req_valid),
-                .in_req_mask    (lsu_dcache_if[i].req_data.mask),
-                .in_req_rw      (lsu_dcache_if[i].req_data.rw),
-                .in_req_byteen  (lsu_dcache_if[i].req_data.byteen),
-                .in_req_addr    (lsu_dcache_if[i].req_data.addr),
-                .in_req_flags   (lsu_dcache_if[i].req_data.flags),
-                .in_req_data    (lsu_dcache_if[i].req_data.data),
-                .in_req_tag     (lsu_dcache_if[i].req_data.tag),
-                .in_req_ready   (lsu_dcache_if[i].req_ready),
+                .in_req_valid   (lsu_dcache_if_req_valid[i]),
+                .in_req_mask    (lsu_dcache_if_req_data_mask[i]),
+                .in_req_rw      (lsu_dcache_if_req_data_rw[i]),
+                .in_req_byteen  (lsu_dcache_if_req_data_byteen[i]),
+                .in_req_addr    (lsu_dcache_if_req_data_addr[i]),
+                .in_req_flags   (lsu_dcache_if_req_data_flags[i]),
+                .in_req_data    (lsu_dcache_if_req_data_data[i]),
+                .in_req_tag     (lsu_dcache_req_tag),
+                .in_req_ready   (lsu_dcache_if_req_ready[i]),
 
                 // Input response
-                .in_rsp_valid   (lsu_dcache_if[i].rsp_valid),
-                .in_rsp_mask    (lsu_dcache_if[i].rsp_data.mask),
-                .in_rsp_data    (lsu_dcache_if[i].rsp_data.data),
-                .in_rsp_tag     (lsu_dcache_if[i].rsp_data.tag),
-                .in_rsp_ready   (lsu_dcache_if[i].rsp_ready),
+                .in_rsp_valid   (lsu_dcache_if_rsp_valid[i]),
+                .in_rsp_mask    (lsu_dcache_if_rsp_data_mask[i]),
+                .in_rsp_data    (lsu_dcache_if_rsp_data_data[i]),
+                .in_rsp_tag     (lsu_dcache_rsp_tag),
+                .in_rsp_ready   (lsu_dcache_if_rsp_ready[i]),
 
                 // Output request
-                .out_req_valid  (dcache_coalesced_if[i].req_valid),
-                .out_req_mask   (dcache_coalesced_if[i].req_data.mask),
-                .out_req_rw     (dcache_coalesced_if[i].req_data.rw),
-                .out_req_byteen (dcache_coalesced_if[i].req_data.byteen),
-                .out_req_addr   (dcache_coalesced_if[i].req_data.addr),
-                .out_req_flags  (dcache_coalesced_if[i].req_data.flags),
-                .out_req_data   (dcache_coalesced_if[i].req_data.data),
-                .out_req_tag    (dcache_coalesced_if[i].req_data.tag),
-                .out_req_ready  (dcache_coalesced_if[i].req_ready),
+                .out_req_valid  (dcache_coalesced_if_req_valid[i]),
+                .out_req_mask   (dcache_coalesced_if_req_data_mask[i]),
+                .out_req_rw     (dcache_coalesced_if_req_data_rw[i]),
+                .out_req_byteen (dcache_coalesced_if_req_data_byteen[i]),
+                .out_req_addr   (dcache_coalesced_if_req_data_addr[i]),
+                .out_req_flags  (dcache_coalesced_if_req_data_flags[i]),
+                .out_req_data   (dcache_coalesced_if_req_data_data[i]),
+                .out_req_tag    (dcache_coalesced_req_tag),
+                .out_req_ready  (dcache_coalesced_if_req_ready[i]),
 
                 // Output response
-                .out_rsp_valid  (dcache_coalesced_if[i].rsp_valid),
-                .out_rsp_mask   (dcache_coalesced_if[i].rsp_data.mask),
-                .out_rsp_data   (dcache_coalesced_if[i].rsp_data.data),
-                .out_rsp_tag    (dcache_coalesced_if[i].rsp_data.tag),
-                .out_rsp_ready  (dcache_coalesced_if[i].rsp_ready)
+                .out_rsp_valid  (dcache_coalesced_if_rsp_valid[i]),
+                .out_rsp_mask   (dcache_coalesced_if_rsp_data_mask[i]),
+                .out_rsp_data   (dcache_coalesced_if_rsp_data_data[i]),
+                .out_rsp_tag    (dcache_coalesced_rsp_tag),
+                .out_rsp_ready  (dcache_coalesced_if_rsp_ready[i])
             );
         end
 
     end else begin : g_passthru
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
+            // `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
+            `ASSIGN_VX_LSU_MEM_IF_FLAT_I(dcache_coalesced_if, i, lsu_dcache_if, i);
         `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
         `endif
@@ -255,7 +297,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         ) dcache_adapter (
             .clk        (clk),
             .reset      (reset),
-            .lsu_mem_if (dcache_coalesced_if[i]),
+            // .lsu_mem_if (dcache_coalesced_if[i]),
+            `VX_LSU_MEM_IF_PASS_PORTS_I(lsu_mem_if, dcache_coalesced_if, i),
             // .mem_bus_if (dcache_bus_tmp_if)
             `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, dcache_bus_tmp_if)
         );

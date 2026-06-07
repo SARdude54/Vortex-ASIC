@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_lsu_mem_if.vh"
 
 module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
@@ -19,6 +20,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
     parameter TAG_WIDTH      = 1,
+    parameter OUT_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS),
     parameter TAG_SEL_IDX    = 0,
     parameter REQ_OUT_BUF    = 0,
     parameter RSP_OUT_BUF    = 0,
@@ -30,8 +32,11 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-    VX_lsu_mem_if.slave     bus_in_if [NUM_INPUTS],
-    VX_lsu_mem_if.master    bus_out_if [NUM_OUTPUTS]
+    // VX_lsu_mem_if.slave     bus_in_if [NUM_INPUTS],
+    `VX_LSU_MEM_IF_CONSUMER_PORTS_N(bus_in_if, NUM_LANES, DATA_SIZE, TAG_WIDTH, FLAGS_WIDTH, MEM_ADDR_WIDTH, NUM_INPUTS),
+    // VX_lsu_mem_if.master    bus_out_if [NUM_OUTPUTS]
+    `VX_LSU_MEM_IF_PRODUCER_PORTS_N(bus_out_if, NUM_LANES, DATA_SIZE, OUT_TAG_WIDTH, FLAGS_WIDTH, MEM_ADDR_WIDTH, NUM_OUTPUTS)
+
 );
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
@@ -50,9 +55,18 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     wire [NUM_INPUTS-1:0]                 req_ready_in;
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
-        assign req_valid_in[i] = bus_in_if[i].req_valid;
-        assign req_data_in[i]  = bus_in_if[i].req_data;
-        assign bus_in_if[i].req_ready = req_ready_in[i];
+        assign req_valid_in[i] = bus_in_if_req_valid[i];
+        assign req_data_in[i] = {
+            bus_in_if_req_data_mask[i],
+            bus_in_if_req_data_rw[i],
+            bus_in_if_req_data_addr[i],
+            bus_in_if_req_data_data[i],
+            bus_in_if_req_data_byteen[i],
+            bus_in_if_req_data_flags[i],
+            bus_in_if_req_data_tag_uuid[i],
+            bus_in_if_req_data_tag_value[i]
+        };
+        assign bus_in_if_req_ready[i] = req_ready_in[i];
     end
 
     VX_stream_arb #(
@@ -74,18 +88,22 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     );
 
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_bus_out_if
-        wire [TAG_WIDTH-1:0] req_tag_out;
-        assign bus_out_if[i].req_valid = req_valid_out[i];
+        wire [TAG_WIDTH-1:0]     req_tag_out;
+        wire [OUT_TAG_WIDTH-1:0] req_tag_with_sel;
+
+        assign bus_out_if_req_valid[i] = req_valid_out[i];
+
         assign {
-            bus_out_if[i].req_data.mask,
-            bus_out_if[i].req_data.rw,
-            bus_out_if[i].req_data.addr,
-            bus_out_if[i].req_data.data,
-            bus_out_if[i].req_data.byteen,
-            bus_out_if[i].req_data.flags,
+            bus_out_if_req_data_mask[i],
+            bus_out_if_req_data_rw[i],
+            bus_out_if_req_data_addr[i],
+            bus_out_if_req_data_data[i],
+            bus_out_if_req_data_byteen[i],
+            bus_out_if_req_data_flags[i],
             req_tag_out
         } = req_data_out[i];
-        assign req_ready_out[i] = bus_out_if[i].req_ready;
+
+        assign req_ready_out[i] = bus_out_if_req_ready[i];
 
         if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
             VX_bits_insert #(
@@ -95,12 +113,17 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
             ) bits_insert (
                 .data_in  (req_tag_out),
                 .ins_in   (req_sel_out[i]),
-                .data_out (bus_out_if[i].req_data.tag)
+                .data_out (req_tag_with_sel)
             );
         end else begin : g_req_tag_out
             `UNUSED_VAR (req_sel_out)
-            assign bus_out_if[i].req_data.tag = req_tag_out;
+            assign req_tag_with_sel = OUT_TAG_WIDTH'(req_tag_out);
         end
+
+        assign {
+            bus_out_if_req_data_tag_uuid[i],
+            bus_out_if_req_data_tag_value[i]
+        } = req_tag_with_sel;
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -118,23 +141,33 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
         wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS-1:0] rsp_sel_in;
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
-            wire [TAG_WIDTH-1:0] rsp_tag_out;
+            wire [OUT_TAG_WIDTH-1:0] rsp_tag_in;
+            wire [TAG_WIDTH-1:0]     rsp_tag_out;
+
+            assign rsp_tag_in = {
+                bus_out_if_rsp_data_tag_uuid[i],
+                bus_out_if_rsp_data_tag_value[i]
+            };
+
             VX_bits_remove #(
-                .N   (TAG_WIDTH + LOG_NUM_REQS),
+                .N   (OUT_TAG_WIDTH),
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_remove (
-                .data_in  (bus_out_if[i].rsp_data.tag),
+                .data_in  (rsp_tag_in),
                 .sel_out  (rsp_sel_in[i]),
                 .data_out (rsp_tag_out)
             );
-            assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
-            assign rsp_data_in[i]  = {
-                bus_out_if[i].rsp_data.mask,
-                bus_out_if[i].rsp_data.data,
+
+            assign rsp_valid_in[i] = bus_out_if_rsp_valid[i];
+
+            assign rsp_data_in[i] = {
+                bus_out_if_rsp_data_mask[i],
+                bus_out_if_rsp_data_data[i],
                 rsp_tag_out
             };
-            assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
+
+            assign bus_out_if_rsp_ready[i] = rsp_ready_in[i];
         end
 
         VX_stream_switch #(
@@ -157,9 +190,14 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     end else begin : g_rsp_arb
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
-            assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
-            assign rsp_data_in[i]  = bus_out_if[i].rsp_data;
-            assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
+            assign rsp_valid_in[i] = bus_out_if_rsp_valid[i];
+            assign rsp_data_in[i] = {
+                bus_out_if_rsp_data_mask[i],
+                bus_out_if_rsp_data_data[i],
+                bus_out_if_rsp_data_tag_uuid[i],
+                bus_out_if_rsp_data_tag_value[i]
+            };
+            assign bus_out_if_rsp_ready[i] = rsp_ready_in[i];
         end
 
         VX_stream_arb #(
@@ -183,9 +221,14 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_output
-        assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
-        assign bus_in_if[i].rsp_data  = rsp_data_out[i];
-        assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
+        assign bus_in_if_rsp_valid[i] = rsp_valid_out[i];
+        assign {
+            bus_in_if_rsp_data_mask[i],
+            bus_in_if_rsp_data_data[i],
+            bus_in_if_rsp_data_tag_uuid[i],
+            bus_in_if_rsp_data_tag_value[i]
+        } = rsp_data_out[i];
+        assign rsp_ready_out[i] = bus_in_if_rsp_ready[i];
     end
 
 endmodule

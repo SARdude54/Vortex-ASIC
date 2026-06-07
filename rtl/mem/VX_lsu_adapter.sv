@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_mem_bus_if.vh"
+`include "VX_lsu_mem_if.vh"
 
 module VX_lsu_adapter import VX_gpu_pkg::*; #(
     parameter NUM_LANES     = 1,
@@ -26,16 +27,10 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-    VX_lsu_mem_if.slave     lsu_mem_if,
+    // VX_lsu_mem_if.slave     lsu_mem_if,
+    `VX_LSU_MEM_IF_CONSUMER_PORTS(lsu_mem_if, NUM_LANES, DATA_SIZE, TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH),
 
-    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(
-        mem_bus_if,
-        DATA_SIZE,
-        TAG_WIDTH,
-        MEM_FLAGS_WIDTH,
-        `MEM_ADDR_WIDTH,
-        NUM_LANES
-    )
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(mem_bus_if, DATA_SIZE, TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, NUM_LANES)
 );
 
     localparam REQ_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE);
@@ -55,11 +50,11 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_req_data_in
         assign req_data_in[i] = {
-            lsu_mem_if.req_data.rw,
-            lsu_mem_if.req_data.addr[i],
-            lsu_mem_if.req_data.data[i],
-            lsu_mem_if.req_data.byteen[i],
-            lsu_mem_if.req_data.flags[i]
+            lsu_mem_if_req_data_rw,
+            lsu_mem_if_req_data_addr[i],
+            lsu_mem_if_req_data_data[i],
+            lsu_mem_if_req_data_byteen[i],
+            lsu_mem_if_req_data_flags[i]
         };
     end
 
@@ -71,11 +66,11 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     ) stream_unpack (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (lsu_mem_if.req_valid),
-        .mask_in    (lsu_mem_if.req_data.mask),
+        .valid_in   (lsu_mem_if_req_valid),
+        .mask_in    (lsu_mem_if_req_data_mask),
         .data_in    (req_data_in),
-        .tag_in     (lsu_mem_if.req_data.tag),
-        .ready_in   (lsu_mem_if.req_ready),
+        .tag_in     ({lsu_mem_if_req_data_tag_uuid, lsu_mem_if_req_data_tag_value}),
+        .ready_in   (lsu_mem_if_req_ready),
         .valid_out  (req_valid_out),
         .data_out   (req_data_out),
         .tag_out    (req_tag_out),
@@ -132,11 +127,11 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
         .data_in    (rsp_data_out),
         .tag_in     (rsp_tag_out),
         .ready_in   (rsp_ready_out),
-        .valid_out  (lsu_mem_if.rsp_valid),
-        .mask_out   (lsu_mem_if.rsp_data.mask),
-        .data_out   (lsu_mem_if.rsp_data.data),
-        .tag_out    (lsu_mem_if.rsp_data.tag),
-        .ready_out  (lsu_mem_if.rsp_ready)
+        .valid_out  (lsu_mem_if_rsp_valid),
+        .mask_out   (lsu_mem_if_rsp_data_mask),
+        .data_out   (lsu_mem_if_rsp_data_data),
+        .tag_out    ({lsu_mem_if_rsp_data_tag_uuid, lsu_mem_if_rsp_data_tag_value}),
+        .ready_out  (lsu_mem_if_rsp_ready)
     );
 
 endmodule

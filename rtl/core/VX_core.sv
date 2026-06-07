@@ -28,6 +28,7 @@
 `include "VX_commit_if.vh"
 `include "VX_writeback_if.vh"
 `include "VX_mem_bus_if.vh"
+`include "VX_lsu_mem_if.vh"
 
 
 `ifdef EXT_F_ENABLE
@@ -97,11 +98,12 @@ module VX_core import VX_gpu_pkg::*; #(
     `VX_WRITEBACK_IF_SIGNALS(writeback_if, `ISSUE_WIDTH)
 
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_mem_if[`NUM_LSU_BLOCKS]();
+    // VX_lsu_mem_if #(
+    //     .NUM_LANES (`NUM_LSU_LANES),
+    //     .DATA_SIZE (LSU_WORD_SIZE),
+    //     .TAG_WIDTH (LSU_TAG_WIDTH)
+    // ) lsu_mem_if[`NUM_LSU_BLOCKS]();
+    `VX_LSU_MEM_IF_SIGNALS_N(lsu_mem_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS);
 
 `ifdef PERF_ENABLE
     lmem_perf_t lmem_perf;
@@ -228,7 +230,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .base_dcrs      (base_dcrs),
 
-        .lsu_mem_if     (lsu_mem_if),
+        // .lsu_mem_if     (lsu_mem_if),
+        `VX_LSU_MEM_IF_PASS_PORTS(lsu_mem_if, lsu_mem_if),
 
         // .dispatch_if    (dispatch_if),
         `VX_DISPATCH_IF_PASS_PORTS(dispatch_if, dispatch_if),
@@ -272,7 +275,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .lmem_perf     (lmem_perf),
         .coalescer_perf(coalescer_perf),
     `endif
-        .lsu_mem_if    (lsu_mem_if),
+        // .lsu_mem_if    (lsu_mem_if),
+        `VX_LSU_MEM_IF_PASS_PORTS(lsu_mem_if, lsu_mem_if),
         // .dcache_bus_if (dcache_bus_if)
         `VX_MEM_BUS_IF_PASS_PORTS(dcache_bus_if, dcache_bus_if)
     );
@@ -302,9 +306,9 @@ module VX_core import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin : g_j
-            assign perf_dcache_rd_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_wr_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_rsp_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;
+            assign perf_dcache_rd_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if_req_valid[i] && lsu_mem_if_req_data_mask[i][j] && lsu_mem_if_req_ready[i] && ~lsu_mem_if_req_data_rw[i];
+            assign perf_dcache_wr_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if_req_valid[i] && lsu_mem_if_req_data.mask[i][j] && lsu_mem_if_req_ready[i] && lsu_mem_if_req_data_rw[i];
+            assign perf_dcache_rsp_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if_rsp_valid[i] && lsu_mem_if_rsp_data_mask[i][j] && lsu_mem_if_rsp_ready[i];
         end
     end
 

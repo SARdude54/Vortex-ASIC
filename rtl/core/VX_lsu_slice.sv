@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_execute_if.vh"
 `include "VX_result_if.vh"
+`include "VX_lsu_mem_if.vh"
 
 module VX_lsu_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -31,7 +32,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // VX_result_if.master     result_if,
     `VX_RESULT_IF_PRODUCER_PORTS(result_if, lsu_res_t),
 
-    VX_lsu_mem_if.master    lsu_mem_if
+    // VX_lsu_mem_if.master    lsu_mem_if
+    `VX_LSU_MEM_IF_PRODUCER_PORTS(lsu_mem_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH)
 );
     localparam NUM_LANES    = `NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -379,21 +381,27 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .mem_rsp_ready  (lsu_mem_rsp_ready)
     );
 
-    assign lsu_mem_if.req_valid = lsu_mem_req_valid;
-    assign lsu_mem_if.req_data.mask = lsu_mem_req_mask;
-    assign lsu_mem_if.req_data.rw = lsu_mem_req_rw;
-    assign lsu_mem_if.req_data.byteen = lsu_mem_req_byteen;
-    assign lsu_mem_if.req_data.addr = lsu_mem_req_addr;
-    assign lsu_mem_if.req_data.flags = lsu_mem_req_flags;
-    assign lsu_mem_if.req_data.data = lsu_mem_req_data;
-    assign lsu_mem_if.req_data.tag = lsu_mem_req_tag;
-    assign lsu_mem_req_ready = lsu_mem_if.req_ready;
+    assign lsu_mem_if_req_valid = lsu_mem_req_valid;
+    assign lsu_mem_if_req_data_mask = lsu_mem_req_mask;
+    assign lsu_mem_if_req_data_rw = lsu_mem_req_rw;
+    assign lsu_mem_if_req_data_byteen = lsu_mem_req_byteen;
+    assign lsu_mem_if_req_data_addr = lsu_mem_req_addr;
+    assign lsu_mem_if_req_data_flags = lsu_mem_req_flags;
+    assign lsu_mem_if_req_data_data = lsu_mem_req_data;
+    assign {
+        lsu_mem_if_req_data_tag_uuid,
+        lsu_mem_if_req_data_tag_value
+    } = lsu_mem_req_tag;
+    assign lsu_mem_req_ready = lsu_mem_if_req_ready;
 
-    assign lsu_mem_rsp_valid = lsu_mem_if.rsp_valid;
-    assign lsu_mem_rsp_mask = lsu_mem_if.rsp_data.mask;
-    assign lsu_mem_rsp_data = lsu_mem_if.rsp_data.data;
-    assign lsu_mem_rsp_tag = lsu_mem_if.rsp_data.tag;
-    assign lsu_mem_if.rsp_ready = lsu_mem_rsp_ready;
+    assign lsu_mem_rsp_valid = lsu_mem_if_rsp_valid;
+    assign lsu_mem_rsp_mask = lsu_mem_if_rsp_data_mask;
+    assign lsu_mem_rsp_data = lsu_mem_if_rsp_data_data;
+    assign lsu_mem_rsp_tag = {
+        lsu_mem_if_rsp_data_tag_uuid,
+        lsu_mem_if_rsp_data_tag_value
+    };
+    assign lsu_mem_if_rsp_ready = lsu_mem_rsp_ready;
 
     wire [UUID_WIDTH-1:0] rsp_uuid;
     wire [NW_WIDTH-1:0] rsp_wid;
@@ -578,8 +586,26 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     ila_lsu ila_lsu_inst (
         .clk    (clk),
         .probe0 ({execute_if.valid, execute_if_data, execute_if_ready}),
-        .probe1 ({lsu_mem_if.req_valid, lsu_mem_if.req_data, lsu_mem_if.req_ready}),
-        .probe2 ({lsu_mem_if.rsp_valid, lsu_mem_if.rsp_data, lsu_mem_if.rsp_ready})
+        .probe1 ({
+            lsu_mem_if_req_valid,
+            lsu_mem_if_req_data_mask,
+            lsu_mem_if_req_data_rw,
+            lsu_mem_if_req_data_addr,
+            lsu_mem_if_req_data_data,
+            lsu_mem_if_req_data_byteen,
+            lsu_mem_if_req_data_flags,
+            lsu_mem_if_req_data_tag_uuid,
+            lsu_mem_if_req_data_tag_value,
+            lsu_mem_if_req_ready
+        }),
+        .probe2 ({
+            lsu_mem_if_rsp_valid,
+            lsu_mem_if_rsp_data_mask,
+            lsu_mem_if_rsp_data_data,
+            lsu_mem_if_rsp_data_tag_uuid,
+            lsu_mem_if_rsp_data_tag_value,
+            lsu_mem_if_rsp_ready
+})
     );
 `endif
 `endif

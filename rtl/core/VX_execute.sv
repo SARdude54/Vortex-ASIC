@@ -18,6 +18,7 @@
 `include "VX_warp_ctl_if.vh"
 `include "VX_dispatch_if.vh" 
 `include "VX_commit_if.vh"
+`include "VX_lsu_mem_if.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -36,7 +37,8 @@ module VX_execute import VX_gpu_pkg::*; #(
     input base_dcrs_t       base_dcrs,
 
     // Dcache interface
-    VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS],
+    // VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS],
+    `VX_LSU_MEM_IF_PRODUCER_PORTS_N(lsu_mem_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS),
 
     // dispatch interface
     // VX_dispatch_if.slave    dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
@@ -98,7 +100,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .commit_if_valid(commit_if_valid[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if_data(commit_if_data[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if_ready(commit_if_ready[EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .lsu_mem_if     (lsu_mem_if)
+        // .lsu_mem_if     (lsu_mem_if)
+        `VX_LSU_MEM_IF_PASS_PORTS(lsu_mem_if, lsu_mem_if)
     );
 
 `ifdef EXT_F_ENABLE

@@ -15,6 +15,7 @@
 `include "VX_commit_if.vh"
 `include "VX_execute_if.vh"
 `include "VX_result_if.vh"
+`include "VX_lsu_mem_if.vh"
 
 module VX_lsu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -33,7 +34,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // Outputs
     // VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     `VX_COMMIT_IF_PRODUCER_PORTS(commit_if, `ISSUE_WIDTH),
-    VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS]
+    // VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS]
+    `VX_LSU_MEM_IF_PRODUCER_PORTS_N(lsu_mem_if, `NUM_LSU_LANES, LSU_WORD_SIZE, LSU_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `NUM_LSU_BLOCKS)
 );
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `NUM_LSU_LANES;
@@ -77,7 +79,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             `VX_EXECUTE_IF_PASS_PORTS_I(execute_if, per_block_execute_if, block_idx),
             // .result_if  (per_block_result_if[block_idx]),
             `VX_RESULT_IF_PASS_PORTS_I(result_if, per_block_result_if, block_idx),
-            .lsu_mem_if (lsu_mem_if[block_idx])
+            // .lsu_mem_if (lsu_mem_if[block_idx])
+            `VX_LSU_MEM_IF_PASS_PORTS_I(lsu_mem_if, lsu_mem_if, block_idx)
         );
     end
 

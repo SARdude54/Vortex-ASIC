@@ -308,6 +308,24 @@
     assign src``_rsp_data_tag_value[src_i]     = dst``_rsp_data_tag_value[dst_i]; \
     assign dst``_rsp_ready[dst_i]              = src``_rsp_ready[src_i]
 
+`define ASSIGN_VX_LSU_MEM_IF_FLAT_I(dst, dst_i, src, src_i) \
+    assign dst``_req_valid[dst_i]          = src``_req_valid[src_i]; \
+    assign dst``_req_data_mask[dst_i]      = src``_req_data_mask[src_i]; \
+    assign dst``_req_data_rw[dst_i]        = src``_req_data_rw[src_i]; \
+    assign dst``_req_data_addr[dst_i]      = src``_req_data_addr[src_i]; \
+    assign dst``_req_data_data[dst_i]      = src``_req_data_data[src_i]; \
+    assign dst``_req_data_byteen[dst_i]    = src``_req_data_byteen[src_i]; \
+    assign dst``_req_data_flags[dst_i]     = src``_req_data_flags[src_i]; \
+    assign dst``_req_data_tag_uuid[dst_i]  = src``_req_data_tag_uuid[src_i]; \
+    assign dst``_req_data_tag_value[dst_i] = src``_req_data_tag_value[src_i]; \
+    assign src``_req_ready[src_i]          = dst``_req_ready[dst_i]; \
+    assign src``_rsp_valid[src_i]          = dst``_rsp_valid[dst_i]; \
+    assign src``_rsp_data_mask[src_i]      = dst``_rsp_data_mask[dst_i]; \
+    assign src``_rsp_data_data[src_i]      = dst``_rsp_data_data[dst_i]; \
+    assign src``_rsp_data_tag_uuid[src_i]  = dst``_rsp_data_tag_uuid[dst_i]; \
+    assign src``_rsp_data_tag_value[src_i] = dst``_rsp_data_tag_value[dst_i]; \
+    assign dst``_rsp_ready[dst_i]          = src``_rsp_ready[src_i]
+
 `define ASSIGN_VX_MEM_BUS_RO_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data.rw = 0; \
