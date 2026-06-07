@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 `include "VX_dcr_bus_if.vh"
 `include "VX_mem_bus_if.vh"
+`include "VX_gbar_bus_if.vh"
 
 module VX_socket import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0,
@@ -40,7 +41,8 @@ module VX_socket import VX_gpu_pkg::*; #(
 
 `ifdef GBAR_ENABLE
     // Barrier
-    VX_gbar_bus_if.master   gbar_bus_if,
+    // VX_gbar_bus_if.master   gbar_bus_if,
+    `VX_GBAR_BUS_IF_PRODUCER_PORTS(gbar_bus_if),
 `endif
     // Status
     output wire             busy
@@ -52,7 +54,8 @@ module VX_socket import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef GBAR_ENABLE
-    VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
+    // VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
+    `VX_GBAR_BUS_IF_SIGNALS_N(per_core_gbar_bus_if, `SOCKET_SIZE);
 
     VX_gbar_arb #(
         .NUM_REQS (`SOCKET_SIZE),
@@ -60,8 +63,10 @@ module VX_socket import VX_gpu_pkg::*; #(
     ) gbar_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (per_core_gbar_bus_if),
-        .bus_out_if (gbar_bus_if)
+        // .bus_in_if  (per_core_gbar_bus_if),
+        `VX_GBAR_BUS_IF_PASS_PORTS(bus_in_if, per_core_gbar_bus_if),
+        // .bus_out_if (gbar_bus_if)
+        `VX_GBAR_BUS_IF_PASS_PORTS(bus_out_if, gbar_bus_if)
     );
 `endif
 
@@ -271,7 +276,8 @@ module VX_socket import VX_gpu_pkg::*; #(
             `VX_MEM_BUS_IF_PASS_PORTS_I(icache_bus_if, per_core_icache_bus_if, core_id),
 
         `ifdef GBAR_ENABLE
-            .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
+            // .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
+            `VX_GBAR_BUS_IF_PASS_PORTS_N(gbar_bus_if, per_core_gbar_bus_if, core_id),
         `endif
 
             .busy           (per_core_busy[core_id])
