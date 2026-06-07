@@ -27,6 +27,7 @@
 `include "VX_dispatch_if.vh"
 `include "VX_commit_if.vh"
 `include "VX_writeback_if.vh"
+`include "VX_mem_bus_if.vh"
 
 
 `ifdef EXT_F_ENABLE
@@ -50,9 +51,11 @@ module VX_core import VX_gpu_pkg::*; #(
     // flattened: VX_dcr_bus_if.slave     dcr_bus_if,
     `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
-    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
+    // VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(dcache_bus_if, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, DCACHE_NUM_REQS),
 
-    VX_mem_bus_if.master    icache_bus_if,
+    // VX_mem_bus_if.master    icache_bus_if,
+    `VX_MEM_BUS_IF_PRODUCER_PORTS(icache_bus_if, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH),
 
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
@@ -166,7 +169,8 @@ module VX_core import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (reset),
-        .icache_bus_if  (icache_bus_if),
+        // .icache_bus_if  (icache_bus_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(icache_bus_if, icache_bus_if),
         // flatten: .schedule_if    (schedule_if),
         `VX_SCHEDULE_IF_PASS_PORTS(schedule_if),
         // flatten: .fetch_if       (fetch_if)
@@ -269,7 +273,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .coalescer_perf(coalescer_perf),
     `endif
         .lsu_mem_if    (lsu_mem_if),
-        .dcache_bus_if (dcache_bus_if)
+        // .dcache_bus_if (dcache_bus_if)
+        `VX_MEM_BUS_IF_PASS_PORTS(dcache_bus_if, dcache_bus_if)
     );
 
 `ifdef PERF_ENABLE
@@ -288,8 +293,8 @@ module VX_core import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_loads;
     reg [PERF_CTR_BITS-1:0] perf_stores;
 
-    wire perf_icache_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
-    wire perf_icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    wire perf_icache_req_fire = icache_bus_if_req_valid && icache_bus_if_req_ready;
+    wire perf_icache_rsp_fire = icache_bus_if_rsp_valid && icache_bus_if_rsp_ready;
 
     wire [LSU_NUM_REQS-1:0] perf_dcache_rd_req_fire, perf_dcache_rd_req_fire_r;
     wire [LSU_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;

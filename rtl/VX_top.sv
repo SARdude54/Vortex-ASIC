@@ -1,5 +1,6 @@
 `include "VX_define.vh"
 `include "VX_dcr_bus_if.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_top import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0,
@@ -12,7 +13,9 @@ module VX_top import VX_gpu_pkg::*; #(
     `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
     // Pass in VX_mem_bus_if instead of instantiating here (easier for simulation)
-    VX_mem_bus_if.master mem_bus_if[`L1_MEM_PORTS],
+    
+    // Flatten: VX_mem_bus_if.master mem_bus_if[`L1_MEM_PORTS],
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(mem_bus_if, `L1_LINE_SIZE, L1_MEM_ARB_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `L1_MEM_PORTS),
 
     output wire busy
 );
@@ -36,7 +39,8 @@ module VX_top import VX_gpu_pkg::*; #(
         .reset(reset),
         // flatten: .dcr_bus_if(socket_dcr_bus_if),
         `VX_DCR_BUS_PASS_PORTS(dcr_bus_if, socket_dcr_bus_if),
-        .mem_bus_if(mem_bus_if),
+        // flatten: .mem_bus_if(mem_bus_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, mem_bus_if),
         .busy(busy)
     );
 

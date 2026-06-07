@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_lsu_adapter import VX_gpu_pkg::*; #(
     parameter NUM_LANES     = 1,
@@ -26,13 +27,24 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     input wire              reset,
 
     VX_lsu_mem_if.slave     lsu_mem_if,
-    VX_mem_bus_if.master    mem_bus_if [NUM_LANES]
+
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(
+        mem_bus_if,
+        DATA_SIZE,
+        TAG_WIDTH,
+        MEM_FLAGS_WIDTH,
+        `MEM_ADDR_WIDTH,
+        NUM_LANES
+    )
 );
+
     localparam REQ_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE);
-    localparam REQ_DATA_WIDTH = 1 + DATA_SIZE + REQ_ADDR_WIDTH + MEM_FLAGS_WIDTH + DATA_SIZE * 8;
+    localparam REQ_DATA_WIDTH = 1 + REQ_ADDR_WIDTH + (DATA_SIZE * 8) + DATA_SIZE + MEM_FLAGS_WIDTH;
     localparam RSP_DATA_WIDTH = DATA_SIZE * 8;
 
-    // handle request unpacking
+    localparam UUID_BITS = `UP(UUID_WIDTH);
+    localparam TAG_VALUE_BITS = TAG_WIDTH - UUID_BITS;
+    `STATIC_ASSERT(TAG_WIDTH > UUID_BITS, ("invalid tag width"))
 
     wire [NUM_LANES-1:0][REQ_DATA_WIDTH-1:0] req_data_in;
 
@@ -71,19 +83,23 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_bus_req
-        assign mem_bus_if[i].req_valid = req_valid_out[i];
-        assign {
-            mem_bus_if[i].req_data.rw,
-            mem_bus_if[i].req_data.addr,
-            mem_bus_if[i].req_data.data,
-            mem_bus_if[i].req_data.byteen,
-            mem_bus_if[i].req_data.flags
-         } = req_data_out[i];
-        assign mem_bus_if[i].req_data.tag = req_tag_out[i];
-        assign req_ready_out[i] = mem_bus_if[i].req_ready;
-    end
+        assign mem_bus_if_req_valid[i] = req_valid_out[i];
 
-    // handle response packing
+        assign {
+            mem_bus_if_req_data_rw[i],
+            mem_bus_if_req_data_addr[i],
+            mem_bus_if_req_data_data[i],
+            mem_bus_if_req_data_byteen[i],
+            mem_bus_if_req_data_flags[i]
+        } = req_data_out[i];
+
+        assign {
+            mem_bus_if_req_data_tag_uuid[i],
+            mem_bus_if_req_data_tag_value[i]
+        } = req_tag_out[i];
+
+        assign req_ready_out[i] = mem_bus_if_req_ready[i];
+    end
 
     wire [NUM_LANES-1:0] rsp_valid_out;
     wire [NUM_LANES-1:0][RSP_DATA_WIDTH-1:0] rsp_data_out;
@@ -91,10 +107,15 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0] rsp_ready_out;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_bus_rsp
-        assign rsp_valid_out[i] = mem_bus_if[i].rsp_valid;
-        assign rsp_data_out[i]  = mem_bus_if[i].rsp_data.data;
-        assign rsp_tag_out[i]   = mem_bus_if[i].rsp_data.tag;
-        assign mem_bus_if[i].rsp_ready = rsp_ready_out[i];
+        assign rsp_valid_out[i] = mem_bus_if_rsp_valid[i];
+        assign rsp_data_out[i]  = mem_bus_if_rsp_data_data[i];
+
+        assign rsp_tag_out[i] = {
+            mem_bus_if_rsp_data_tag_uuid[i],
+            mem_bus_if_rsp_data_tag_value[i]
+        };
+
+        assign mem_bus_if_rsp_ready[i] = rsp_ready_out[i];
     end
 
     VX_stream_pack #(

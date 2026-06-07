@@ -13,6 +13,7 @@
 
 `include "VX_define.vh"
 `include "VX_dcr_bus_if.vh"
+`include "VX_mem_bus_if.vh"
 
 module VX_socket import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0,
@@ -33,7 +34,9 @@ module VX_socket import VX_gpu_pkg::*; #(
     `VX_DCR_BUS_CONSUMER_PORTS(dcr_bus_if, VX_DCR_ADDR_WIDTH, VX_DCR_DATA_WIDTH),
 
     // Memory
-    VX_mem_bus_if.master    mem_bus_if [`L1_MEM_PORTS],
+    // flatten: VX_mem_bus_if.master    mem_bus_if [`L1_MEM_PORTS],
+    `VX_MEM_BUS_IF_PRODUCER_PORTS_N(mem_bus_if, `L1_LINE_SIZE, L1_MEM_ARB_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `L1_MEM_PORTS),
+
 
 `ifdef GBAR_ENABLE
     // Barrier
@@ -76,15 +79,18 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_bus_if[`SOCKET_SIZE]();
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (ICACHE_WORD_SIZE),
+    //     .TAG_WIDTH (ICACHE_TAG_WIDTH)
+    // ) per_core_icache_bus_if[`SOCKET_SIZE]();
+    `VX_MEM_BUS_IF_SIGNALS_N(per_core_icache_bus_if, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `SOCKET_SIZE);
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_LINE_SIZE),
-        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_bus_if[1]();
+
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (ICACHE_LINE_SIZE),
+    //     .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
+    // ) icache_mem_bus_if[1]();
+    `VX_MEM_BUS_IF_SIGNALS_N(icache_mem_bus_if, ICACHE_LINE_SIZE, ICACHE_MEM_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, 1);
 
     `RESET_RELAY (icache_reset, reset);
 
@@ -116,21 +122,26 @@ module VX_socket import VX_gpu_pkg::*; #(
     `endif
         .clk            (clk),
         .reset          (icache_reset),
-        .core_bus_if    (per_core_icache_bus_if),
-        .mem_bus_if     (icache_mem_bus_if)
+        `VX_MEM_BUS_IF_PASS_PORTS(core_bus_if, per_core_icache_bus_if),
+        // .core_bus_if    (per_core_icache_bus_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, icache_mem_bus_if)
+        //.mem_bus_if     (icache_mem_bus_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (DCACHE_WORD_SIZE),
+    //     .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    // ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
+    `VX_MEM_BUS_IF_SIGNALS_N(per_core_dcache_bus_if, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `SOCKET_SIZE * DCACHE_NUM_REQS);
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_LINE_SIZE),
-        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_bus_if[`L1_MEM_PORTS]();
+
+    // VX_mem_bus_if #(
+    //     .DATA_SIZE (DCACHE_LINE_SIZE),
+    //     .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
+    // ) dcache_mem_bus_if[`L1_MEM_PORTS]();
+    `VX_MEM_BUS_IF_SIGNALS_N(dcache_mem_bus_if, DCACHE_LINE_SIZE, DCACHE_MEM_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, `L1_MEM_PORTS);
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -164,26 +175,31 @@ module VX_socket import VX_gpu_pkg::*; #(
     `endif
         .clk            (clk),
         .reset          (dcache_reset),
-        .core_bus_if    (per_core_dcache_bus_if),
-        .mem_bus_if     (dcache_mem_bus_if)
+        // .core_bus_if    (per_core_dcache_bus_if),
+        `VX_MEM_BUS_IF_PASS_PORTS(core_bus_if, per_core_dcache_bus_if),
+        // .mem_bus_if     (dcache_mem_bus_if)
+        `VX_MEM_BUS_IF_PASS_PORTS(mem_bus_if, dcache_mem_bus_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
 
     for (genvar i = 0; i < `L1_MEM_PORTS; ++i) begin : g_mem_bus_if
         if (i == 0) begin : g_i0
-            VX_mem_bus_if #(
-                .DATA_SIZE (`L1_LINE_SIZE),
-                .TAG_WIDTH (L1_MEM_TAG_WIDTH)
-            ) l1_mem_bus_if[2]();
+            // VX_mem_bus_if #(
+            //     .DATA_SIZE (`L1_LINE_SIZE),
+            //     .TAG_WIDTH (L1_MEM_TAG_WIDTH)
+            // ) l1_mem_bus_if[2]();
+            `VX_MEM_BUS_IF_SIGNALS_N(l1_mem_bus_if, `L1_LINE_SIZE, L1_MEM_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, 2);
 
-            VX_mem_bus_if #(
-                .DATA_SIZE (`L1_LINE_SIZE),
-                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-            ) l1_mem_arb_bus_if[1]();
+            // VX_mem_bus_if #(
+            //     .DATA_SIZE (`L1_LINE_SIZE),
+            //     .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+            // ) l1_mem_arb_bus_if[1]();
+            `VX_MEM_BUS_IF_SIGNALS_N(l1_mem_arb_bus_if, `L1_LINE_SIZE, L1_MEM_ARB_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, 1);
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            // `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX_FLAT_I(l1_mem_bus_if, 0, icache_mem_bus_if, 0, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX_FLAT_I(l1_mem_bus_if, 1, dcache_mem_bus_if, 0, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 
             VX_mem_arb #(
                 .NUM_INPUTS (2),
@@ -197,19 +213,23 @@ module VX_socket import VX_gpu_pkg::*; #(
             ) mem_arb (
                 .clk        (clk),
                 .reset      (reset),
-                .bus_in_if  (l1_mem_bus_if),
-                .bus_out_if (l1_mem_arb_bus_if)
+                // .bus_in_if  (l1_mem_bus_if),
+                `VX_MEM_BUS_IF_PASS_PORTS(bus_in_if, l1_mem_bus_if),
+                // .bus_out_if (l1_mem_arb_bus_if)
+                `VX_MEM_BUS_IF_PASS_PORTS(bus_out_if, l1_mem_arb_bus_if)
             );
 
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[0], l1_mem_arb_bus_if[0]);
+            `ASSIGN_VX_MEM_BUS_IF_FLAT_I (mem_bus_if, 0, l1_mem_arb_bus_if, 0);
         end else begin : g_i
-            VX_mem_bus_if #(
-                .DATA_SIZE (`L1_LINE_SIZE),
-                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-            ) l1_mem_arb_bus_if();
+            // VX_mem_bus_if #(
+            //     .DATA_SIZE (`L1_LINE_SIZE),
+            //     .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+            // ) l1_mem_arb_bus_if();
+            `VX_MEM_BUS_IF_SIGNALS_N(l1_mem_arb_bus_if, `L1_LINE_SIZE, L1_MEM_ARB_TAG_WIDTH, MEM_FLAGS_WIDTH, `MEM_ADDR_WIDTH, 1);
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l1_mem_arb_bus_if);
+
+            `ASSIGN_VX_MEM_BUS_IF_EX_FLAT_I(l1_mem_arb_bus_if, 0, dcache_mem_bus_if, i, L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_FLAT_I (mem_bus_if, i, l1_mem_arb_bus_if, 0);
         end
     end
 
@@ -244,9 +264,11 @@ module VX_socket import VX_gpu_pkg::*; #(
             // .dcr_bus_if     (core_dcr_bus_if),
             `VX_DCR_BUS_PASS_PORTS(dcr_bus_if, core_dcr_bus_if),
 
-            .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
+            // .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
+            `VX_MEM_BUS_IF_PASS_PORTS_SLICE(dcache_bus_if, per_core_dcache_bus_if, core_id * DCACHE_NUM_REQS, DCACHE_NUM_REQS),
 
-            .icache_bus_if  (per_core_icache_bus_if[core_id]),
+            // .icache_bus_if  (per_core_icache_bus_if[core_id]),
+            `VX_MEM_BUS_IF_PASS_PORTS_I(icache_bus_if, per_core_icache_bus_if, core_id),
 
         `ifdef GBAR_ENABLE
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
@@ -259,3 +281,4 @@ module VX_socket import VX_gpu_pkg::*; #(
     `BUFFER_EX(busy, (| per_core_busy), 1'b1, 1, (`SOCKET_SIZE > 1));
 
 endmodule
+

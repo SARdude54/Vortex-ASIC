@@ -292,6 +292,22 @@
     assign src.rsp_data   = dst.rsp_data; \
     assign dst.rsp_ready  = src.rsp_ready
 
+`define ASSIGN_VX_MEM_BUS_IF_FLAT_I(dst, dst_i, src, src_i) \
+    assign dst``_req_valid[dst_i]              = src``_req_valid[src_i]; \
+    assign dst``_req_data_rw[dst_i]            = src``_req_data_rw[src_i]; \
+    assign dst``_req_data_addr[dst_i]          = src``_req_data_addr[src_i]; \
+    assign dst``_req_data_data[dst_i]          = src``_req_data_data[src_i]; \
+    assign dst``_req_data_byteen[dst_i]        = src``_req_data_byteen[src_i]; \
+    assign dst``_req_data_flags[dst_i]         = src``_req_data_flags[src_i]; \
+    assign dst``_req_data_tag_uuid[dst_i]      = src``_req_data_tag_uuid[src_i]; \
+    assign dst``_req_data_tag_value[dst_i]     = src``_req_data_tag_value[src_i]; \
+    assign src``_req_ready[src_i]              = dst``_req_ready[dst_i]; \
+    assign src``_rsp_valid[src_i]              = dst``_rsp_valid[dst_i]; \
+    assign src``_rsp_data_data[src_i]          = dst``_rsp_data_data[dst_i]; \
+    assign src``_rsp_data_tag_uuid[src_i]      = dst``_rsp_data_tag_uuid[dst_i]; \
+    assign src``_rsp_data_tag_value[src_i]     = dst``_rsp_data_tag_value[dst_i]; \
+    assign dst``_rsp_ready[dst_i]              = src``_rsp_ready[src_i]
+
 `define ASSIGN_VX_MEM_BUS_RO_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data.rw = 0; \
@@ -305,6 +321,23 @@
     assign src.rsp_data.data = dst.rsp_data.data; \
     assign src.rsp_data.tag = dst.rsp_data.tag; \
     assign dst.rsp_ready = src.rsp_ready
+
+
+`define ASSIGN_VX_MEM_BUS_RO_IF_FLAT_I(dst, dst_i, src, src_i) \
+    assign dst``_req_valid[dst_i]              = src``_req_valid[src_i]; \
+    assign dst``_req_data_rw[dst_i]            = 1'b0; \
+    assign dst``_req_data_addr[dst_i]          = src``_req_data_addr[src_i]; \
+    assign dst``_req_data_data[dst_i]          = '0; \
+    assign dst``_req_data_byteen[dst_i]        = '1; \
+    assign dst``_req_data_flags[dst_i]         = src``_req_data_flags[src_i]; \
+    assign dst``_req_data_tag_uuid[dst_i]      = src``_req_data_tag_uuid[src_i]; \
+    assign dst``_req_data_tag_value[dst_i]     = src``_req_data_tag_value[src_i]; \
+    assign src``_req_ready[src_i]              = dst``_req_ready[dst_i]; \
+    assign src``_rsp_valid[src_i]              = dst``_rsp_valid[dst_i]; \
+    assign src``_rsp_data_data[src_i]          = dst``_rsp_data_data[dst_i]; \
+    assign src``_rsp_data_tag_uuid[src_i]      = dst``_rsp_data_tag_uuid[dst_i]; \
+    assign src``_rsp_data_tag_value[src_i]     = dst``_rsp_data_tag_value[dst_i]; \
+    assign dst``_rsp_ready[dst_i]              = src``_rsp_ready[src_i]
 
 `define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \
     /* verilator lint_off GENUNNAMED */ \
@@ -354,6 +387,106 @@
     assign dst.rsp_ready = src.rsp_ready \
     /* verilator lint_off GENUNNAMED */
 
+`define ASSIGN_VX_MEM_BUS_IF_EX_FLAT(dst, src, TD, TS, UUID) \
+    /* verilator lint_off GENUNNAMED */ \
+    assign dst``_req_valid     = src``_req_valid; \
+    assign dst``_req_data_rw   = src``_req_data_rw; \
+    assign dst``_req_data_addr = src``_req_data_addr; \
+    assign dst``_req_data_data = src``_req_data_data; \
+    assign dst``_req_data_byteen = src``_req_data_byteen; \
+    assign dst``_req_data_flags  = src``_req_data_flags; \
+    assign dst``_req_data_tag_uuid = src``_req_data_tag_uuid; \
+    if ((TD) != (TS)) begin \
+        if ((UUID) != 0) begin \
+            if ((TD) > (TS)) begin \
+                assign dst``_req_data_tag_value = {{((TD)-(TS)){1'b0}}, src``_req_data_tag_value}; \
+            end else begin \
+                assign dst``_req_data_tag_value = src``_req_data_tag_value[(TD)-(UUID)-1:0]; \
+            end \
+        end else begin \
+            if ((TD) > (TS)) begin \
+                assign dst``_req_data_tag_value = {{((TD)-(TS)){1'b0}}, src``_req_data_tag_value}; \
+            end else begin \
+                assign dst``_req_data_tag_value = src``_req_data_tag_value[(TD)-`UP(UUID_WIDTH)-1:0]; \
+            end \
+        end \
+    end else begin \
+        assign dst``_req_data_tag_value = src``_req_data_tag_value; \
+    end \
+    assign src``_req_ready = dst``_req_ready; \
+    assign src``_rsp_valid = dst``_rsp_valid; \
+    assign src``_rsp_data_data = dst``_rsp_data_data; \
+    assign src``_rsp_data_tag_uuid = dst``_rsp_data_tag_uuid; \
+    if ((TD) != (TS)) begin \
+        if ((UUID) != 0) begin \
+            if ((TD) > (TS)) begin \
+                assign src``_rsp_data_tag_value = dst``_rsp_data_tag_value[(TS)-(UUID)-1:0]; \
+            end else begin \
+                assign src``_rsp_data_tag_value = {{((TS)-(TD)){1'b0}}, dst``_rsp_data_tag_value}; \
+            end \
+        end else begin \
+            if ((TD) > (TS)) begin \
+                assign src``_rsp_data_tag_value = dst``_rsp_data_tag_value[(TS)-`UP(UUID_WIDTH)-1:0]; \
+            end else begin \
+                assign src``_rsp_data_tag_value = {{((TS)-(TD)){1'b0}}, dst``_rsp_data_tag_value}; \
+            end \
+        end \
+    end else begin \
+        assign src``_rsp_data_tag_value = dst``_rsp_data_tag_value; \
+    end \
+    assign dst``_rsp_ready = src``_rsp_ready; \
+    /* verilator lint_on GENUNNAMED */
+
+`define ASSIGN_VX_MEM_BUS_IF_EX_FLAT_I(dst, dst_i, src, src_i, TD, TS, UUID) \
+    /* verilator lint_off GENUNNAMED */ \
+    assign dst``_req_valid[dst_i]       = src``_req_valid[src_i]; \
+    assign dst``_req_data_rw[dst_i]     = src``_req_data_rw[src_i]; \
+    assign dst``_req_data_addr[dst_i]   = src``_req_data_addr[src_i]; \
+    assign dst``_req_data_data[dst_i]   = src``_req_data_data[src_i]; \
+    assign dst``_req_data_byteen[dst_i] = src``_req_data_byteen[src_i]; \
+    assign dst``_req_data_flags[dst_i]  = src``_req_data_flags[src_i]; \
+    assign dst``_req_data_tag_uuid[dst_i] = src``_req_data_tag_uuid[src_i]; \
+    if ((TD) != (TS)) begin \
+        if ((UUID) != 0) begin \
+            if ((TD) > (TS)) begin \
+                assign dst``_req_data_tag_value[dst_i] = {{((TD)-(TS)){1'b0}}, src``_req_data_tag_value[src_i]}; \
+            end else begin \
+                assign dst``_req_data_tag_value[dst_i] = src``_req_data_tag_value[src_i][(TD)-(UUID)-1:0]; \
+            end \
+        end else begin \
+            if ((TD) > (TS)) begin \
+                assign dst``_req_data_tag_value[dst_i] = {{((TD)-(TS)){1'b0}}, src``_req_data_tag_value[src_i]}; \
+            end else begin \
+                assign dst``_req_data_tag_value[dst_i] = src``_req_data_tag_value[src_i][(TD)-`UP(UUID_WIDTH)-1:0]; \
+            end \
+        end \
+    end else begin \
+        assign dst``_req_data_tag_value[dst_i] = src``_req_data_tag_value[src_i]; \
+    end \
+    assign src``_req_ready[src_i] = dst``_req_ready[dst_i]; \
+    assign src``_rsp_valid[src_i] = dst``_rsp_valid[dst_i]; \
+    assign src``_rsp_data_data[src_i] = dst``_rsp_data_data[dst_i]; \
+    assign src``_rsp_data_tag_uuid[src_i] = dst``_rsp_data_tag_uuid[dst_i]; \
+    if ((TD) != (TS)) begin \
+        if ((UUID) != 0) begin \
+            if ((TD) > (TS)) begin \
+                assign src``_rsp_data_tag_value[src_i] = dst``_rsp_data_tag_value[dst_i][(TS)-(UUID)-1:0]; \
+            end else begin \
+                assign src``_rsp_data_tag_value[src_i] = {{((TS)-(TD)){1'b0}}, dst``_rsp_data_tag_value[dst_i]}; \
+            end \
+        end else begin \
+            if ((TD) > (TS)) begin \
+                assign src``_rsp_data_tag_value[src_i] = dst``_rsp_data_tag_value[dst_i][(TS)-`UP(UUID_WIDTH)-1:0]; \
+            end else begin \
+                assign src``_rsp_data_tag_value[src_i] = {{((TS)-(TD)){1'b0}}, dst``_rsp_data_tag_value[dst_i]}; \
+            end \
+        end \
+    end else begin \
+        assign src``_rsp_data_tag_value[src_i] = dst``_rsp_data_tag_value[dst_i]; \
+    end \
+    assign dst``_rsp_ready[dst_i] = src``_rsp_ready[src_i]; \
+    /* verilator lint_on GENUNNAMED */
+
 `define INIT_VX_MEM_BUS_IF(itf) \
     assign itf.req_valid = 0; \
     assign itf.req_data = '0; \
@@ -362,6 +495,22 @@
     `UNUSED_VAR (itf.rsp_data) \
     assign itf.rsp_ready = 0;
 
+`define INIT_VX_MEM_BUS_IF_FLAT(itf, i) \
+    assign itf``_req_valid[i]          = 1'b0; \
+    assign itf``_req_data_rw[i]        = 1'b0; \
+    assign itf``_req_data_addr[i]      = '0; \
+    assign itf``_req_data_data[i]      = '0; \
+    assign itf``_req_data_byteen[i]    = '0; \
+    assign itf``_req_data_flags[i]     = '0; \
+    assign itf``_req_data_tag_uuid[i]  = '0; \
+    assign itf``_req_data_tag_value[i] = '0; \
+    `UNUSED_VAR (itf``_req_ready[i]) \
+    `UNUSED_VAR (itf``_rsp_valid[i]) \
+    `UNUSED_VAR (itf``_rsp_data_data[i]) \
+    `UNUSED_VAR (itf``_rsp_data_tag_uuid[i]) \
+    `UNUSED_VAR (itf``_rsp_data_tag_value[i]) \
+    assign itf``_rsp_ready[i]          = 1'b0
+
 `define UNUSED_VX_MEM_BUS_IF(itf) \
     `UNUSED_VAR (itf.req_valid) \
     `UNUSED_VAR (itf.req_data) \
@@ -369,6 +518,22 @@
     assign itf.rsp_valid = 0; \
     assign itf.rsp_data  = '0; \
     `UNUSED_VAR (itf.rsp_ready)
+
+`define UNUSED_VX_MEM_BUS_IF_FLAT(itf, i) \
+    `UNUSED_VAR (itf``_req_valid[i]) \
+    `UNUSED_VAR (itf``_req_data_rw[i]) \
+    `UNUSED_VAR (itf``_req_data_addr[i]) \
+    `UNUSED_VAR (itf``_req_data_data[i]) \
+    `UNUSED_VAR (itf``_req_data_byteen[i]) \
+    `UNUSED_VAR (itf``_req_data_flags[i]) \
+    `UNUSED_VAR (itf``_req_data_tag_uuid[i]) \
+    `UNUSED_VAR (itf``_req_data_tag_value[i]) \
+    assign itf``_req_ready[i]          = 1'b0; \
+    assign itf``_rsp_valid[i]          = 1'b0; \
+    assign itf``_rsp_data_data[i]      = '0; \
+    assign itf``_rsp_data_tag_uuid[i]  = '0; \
+    assign itf``_rsp_data_tag_value[i] = '0; \
+    `UNUSED_VAR (itf``_rsp_ready[i])
 
 // modified - replace interfaces with prefixes
 `define BUFFER_DCR_BUS_IF(dst_prefix, src_prefix, ena, latency) \
