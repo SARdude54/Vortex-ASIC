@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 `include "VX_define.vh"
+`include "VX_dcr_bus_if.vh"
 `include "VX_mem_bus_if.vh"
 
 
@@ -16,24 +17,6 @@ module TB_VX_Top;
     logic write_valid;
     logic [VX_DCR_ADDR_WIDTH-1:0] write_addr;
     logic [VX_DCR_DATA_WIDTH-1:0] write_data;
-
-    // Flattened memory bus signals
-    logic [NPORTS-1:0]       mem_req_valid;
-    logic [NPORTS-1:0]       mem_req_ready;
-    logic mem_req_rw [NPORTS-1:0];      
-    logic mem_req_addr [NPORTS-1:0];   
-    logic mem_req_data [NPORTS-1:0];   
-    logic mem_req_byteen [NPORTS-1:0]; 
-    logic mem_req_flags [NPORTS-1:0];  
-    logic mem_req_tag_uuid [NPORTS-1:0];  
-    logic mem_req_tag_value [NPORTS-1:0];
-
-    logic [NPORTS-1:0]       mem_rsp_valid;
-    logic [NPORTS-1:0]       mem_rsp_ready;
-
-    logic mem_rsp_data [NPORTS-1:0];
-    logic mem_rsp_tag_uuid [NPORTS-1:0];
-    logic mem_rsp_tag_value [NPORTS-1:0];
 
     // Output
     logic busy;
@@ -83,15 +66,42 @@ module TB_VX_Top;
     input [VX_DCR_DATA_WIDTH-1:0] data
     );
     begin
-        @(posedge clk);
-        write_valid <= 1'b1;
-        write_addr  <= addr;
-        write_data  <= data;
+        @(negedge clk);
+        write_valid = 1'b1;
+        write_addr  = addr;
+        write_data  = data;
 
         @(posedge clk);
-        write_valid <= 1'b0;
-        write_addr  <= '0;
-        write_data  <= '0;
+        #1;
+
+        assert (UUT.socket_dcr_bus_if_write_valid === 1'b1)
+            else $fatal("DCR valid did not propagate into VX_top socket_dcr_bus_if");
+
+        assert (UUT.socket_dcr_bus_if_write_addr === addr)
+            else $fatal("DCR addr did not propagate into VX_top socket_dcr_bus_if");
+
+        assert (UUT.socket_dcr_bus_if_write_data === data)
+            else $fatal("DCR data did not propagate into VX_top socket_dcr_bus_if");
+
+        assert (UUT.socket.dcr_bus_if_write_valid === 1'b1)
+            else $fatal("DCR valid did not reach VX_socket");
+
+        assert (UUT.socket.dcr_bus_if_write_addr === addr)
+            else $fatal("DCR addr did not reach VX_socket");
+
+        assert (UUT.socket.dcr_bus_if_write_data === data)
+            else $fatal("DCR data did not reach VX_socket");
+
+        $display(
+            "[DCR CHECK] addr=0x%0h data=0x%0h propagated into VX_socket",
+            addr,
+            data
+        );
+
+        @(negedge clk);
+        write_valid = 1'b0;
+        write_addr  = '0;
+        write_data  = '0;
     end
     endtask
 
@@ -101,18 +111,31 @@ module TB_VX_Top;
     end
 
     initial begin
+        reset = 1'b1;
         write_valid = 1'b0;
         write_addr  = '0;
         write_data  = '0;
-    end
 
-    initial begin
-        // Vortex reset is usually active-high.
-        reset = 1'b1;
         repeat (5) @(posedge clk);
         reset = 1'b0;
 
-        repeat (20) @(posedge clk);
+        repeat (2) @(posedge clk);
+
+        dcr_write(`VX_DCR_BASE_STARTUP_ADDR0, `STARTUP_ADDR);
+
+        `ifdef XLEN_64
+            dcr_write(`VX_DCR_BASE_STARTUP_ADDR1, (`STARTUP_ADDR >> 32));
+        `else
+            dcr_write(`VX_DCR_BASE_STARTUP_ADDR1, '0);
+        `endif
+
+        dcr_write(`VX_DCR_BASE_STARTUP_ARG0, 32'h0000_0000);
+        dcr_write(`VX_DCR_BASE_STARTUP_ARG1, 32'h0000_0000);
+        dcr_write(`VX_DCR_BASE_MPM_CLASS, `VX_DCR_MPM_CLASS_CORE);
+
+        repeat (10) @(posedge clk);
+
+        $display("PASSED TB_VX_Top DCR write propagation test");
         $finish;
     end
 
@@ -136,6 +159,17 @@ module TB_VX_Top;
             );
         end
     end
+
+    always @(posedge clk) begin
+    if (!reset && write_valid) begin
+        $display(
+            "[TB DCR WRITE] time=%0t addr=0x%0h data=0x%0h",
+            $time,
+            write_addr,
+            write_data
+        );
+    end
+end
 
 endmodule
 
