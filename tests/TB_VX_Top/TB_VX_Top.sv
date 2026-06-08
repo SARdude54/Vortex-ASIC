@@ -77,7 +77,6 @@ module TB_VX_Top;
     wire saw_startup_fetch_rsp = |saw_startup_fetch_rsp_p;
 
     // Fetch and decode observation flags
-    // Level 3B frontend observation flags
     logic saw_core_fetch_valid;
     logic saw_core_fetch_fire;
     logic saw_core_fetch_nop;
@@ -88,6 +87,25 @@ module TB_VX_Top;
 
     logic saw_decode_output_valid;
     logic saw_decode_output_fire;
+
+    // Decode to issue observation flags
+    logic saw_decode_output_nop_like;
+    logic saw_decode_output_alu;
+    logic saw_decode_output_no_wb;
+
+    // Issue observation flags
+    logic saw_issue_input_valid;
+    logic saw_issue_input_fire;
+    logic saw_issue_input_nop_like;
+    logic saw_issue_internal_accept;
+    logic saw_issue_internal_valid;
+    logic saw_issue_slice_decode_valid;
+    logic saw_issue_slice_decode_fire;
+    logic saw_issue_ibuffer_valid;
+    logic saw_issue_ibuffer_fire;
+    logic saw_issue_ibuffer_nop_like;
+    logic saw_issue_operands_valid;
+    logic saw_issue_operands_fire;
 
     // one independent memory model per memory port
     for (genvar p = 0; p < `L1_MEM_PORTS; ++p) begin : g_mem_model
@@ -198,6 +216,8 @@ module TB_VX_Top;
     );
 
     `define CORE0_PATH UUT.socket.g_cores[0].core
+    `define ISSUE_PATH `CORE0_PATH.issue
+    `define ISSUE_SLICE0_PATH `ISSUE_PATH.g_slices[0].issue_slice
 
     
     initial clk = 0;
@@ -257,6 +277,7 @@ module TB_VX_Top;
 
     // main test sequence
     initial begin
+        // init flags
         reset = 1'b1;
         write_valid = 1'b0;
         write_addr  = '0;
@@ -272,6 +293,23 @@ module TB_VX_Top;
 
         saw_decode_output_valid = 1'b0;
         saw_decode_output_fire  = 1'b0;
+
+        saw_decode_output_nop_like = 1'b0;
+        saw_decode_output_alu      = 1'b0;
+        saw_decode_output_no_wb    = 1'b0;
+
+        saw_issue_input_valid       = 1'b0;
+        saw_issue_input_fire        = 1'b0;
+        saw_issue_input_nop_like    = 1'b0;
+        saw_issue_internal_accept   = 1'b0;
+        saw_issue_internal_valid    = 1'b0;
+        saw_issue_slice_decode_valid = 1'b0;
+        saw_issue_slice_decode_fire  = 1'b0;
+        saw_issue_ibuffer_valid      = 1'b0;
+        saw_issue_ibuffer_fire       = 1'b0;
+        saw_issue_ibuffer_nop_like   = 1'b0;
+        saw_issue_operands_valid     = 1'b0;
+        saw_issue_operands_fire      = 1'b0;
 
         repeat (5) @(posedge clk);
         reset = 1'b0;
@@ -297,83 +335,101 @@ module TB_VX_Top;
 
             if (saw_core_fetch_fire
                 && saw_decode_input_fire
-                && saw_decode_output_valid
-                && saw_decode_input_nop) begin
+                && saw_decode_input_nop
+                && saw_decode_output_fire
+                && saw_decode_output_nop_like
+                && saw_issue_input_fire
+                && saw_issue_input_nop_like
+                && saw_issue_slice_decode_fire
+                && saw_issue_ibuffer_fire
+                && saw_issue_ibuffer_nop_like) begin
 
-                $display("PASSED TB_VX_Top Level 3B fetch-to-decode test");
-
-                if (saw_any_fetch_req && saw_any_fetch_rsp) begin
-                    $display("INFO: Level 3A external fetch request/response also passed");
-                end
-
-                if (saw_core_fetch_nop) begin
-                    $display("INFO: VX_core fetch_if observed NOP instruction 0x%0h", NOP_INSTR);
-                end
-
-                if (saw_decode_input_nop) begin
-                    $display("INFO: VX_decode input observed NOP instruction 0x%0h", NOP_INSTR);
-                end
-
-                if (saw_decode_output_fire) begin
-                    $display("INFO: VX_decode output was accepted by downstream issue");
-                end else begin
-                    $display("INFO: VX_decode output became valid, but downstream issue acceptance was not required for Level 3B");
-                end
-
-                if (saw_startup_fetch_req && saw_startup_fetch_rsp) begin
-                    $display("INFO: Fetch also matched STARTUP_ADDR line_addr=0x%0h", STARTUP_LINE_ADDR);
-                end else begin
-                    $display(
-                        "INFO: Frontend worked, but no accepted fetch matched STARTUP_ADDR line_addr=0x%0h. Core appears to be fetching from reset/boot PC.",
-                        STARTUP_LINE_ADDR
-                    );
-                end
-
+                $display("PASSED TB_VX_Top Issue Queue Validation: VX_issue_slice IBuffer accepted decoded NOP");
                 $finish;
             end
         end
 
         if (!saw_any_mem_req) begin
-            $fatal("Level 3A failed: no memory request observed after DCR startup programming");
+            $fatal("Memory Request/Response Validation failed: no memory request observed after DCR startup programming");
         end
 
         if (!saw_any_fetch_req) begin
-            $fatal("Level 3A failed: memory requests occurred, but no read/fetch request was observed");
+            $fatal("Memory Request/Response Validation failed: memory requests occurred, but no read/fetch request was observed");
         end
 
         if (!saw_any_fetch_rsp) begin
-            $fatal("Level 3A failed: read/fetch request occurred, but no response was accepted");
+            $fatal("Memory Request/Response Validation failed: read/fetch request occurred, but no response was accepted");
         end
 
         if (!saw_core_fetch_valid) begin
-            $fatal("Level 3B failed: VX_core fetch_if_valid was never asserted");
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_core fetch_if_valid was never asserted");
         end
 
         if (!saw_core_fetch_fire) begin
-            $fatal("Level 3B failed: VX_core fetch_if_valid asserted, but fetch_if_ready never accepted it");
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_core fetch_if_valid asserted, but fetch_if_ready never accepted it");
         end
 
         if (!saw_core_fetch_nop) begin
-            $fatal("Level 3B failed: VX_core fetch_if fired, but NOP instruction 0x%0h was not observed", NOP_INSTR);
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_core fetch_if fired, but NOP instruction 0x%0h was not observed", NOP_INSTR);
         end
 
         if (!saw_decode_input_valid) begin
-            $fatal("Level 3B failed: VX_decode input fetch_if_valid was never asserted");
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_decode input fetch_if_valid was never asserted");
         end
 
         if (!saw_decode_input_fire) begin
-            $fatal("Level 3B failed: VX_decode input did not handshake fetch_if_valid && fetch_if_ready");
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_decode input did not handshake fetch_if_valid && fetch_if_ready");
         end
 
         if (!saw_decode_input_nop) begin
-            $fatal("Level 3B failed: VX_decode input did not observe NOP instruction 0x%0h", NOP_INSTR);
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_decode input did not observe NOP instruction 0x%0h", NOP_INSTR);
         end
 
         if (!saw_decode_output_valid) begin
-            $fatal("Level 3B failed: VX_decode never produced decode_if_valid");
+            $fatal("Fetch-to-Decode Visibility Validation failed: VX_decode never produced decode_if_valid");
         end
 
-        $fatal("Level 3B timed out unexpectedly");
+        if (!saw_decode_output_fire) begin
+            $fatal("Decode-to-Issue Validation failed: VX_decode output decode_if_valid && decode_if_ready never fired");
+        end
+
+        if (!saw_decode_output_nop_like) begin
+            $fatal("Decode-to-Issue Validation failed: decode output fired, but instruction was not NOP-like EX_ALU with wb=0");
+        end
+
+        if (!saw_issue_input_valid) begin
+            $fatal("Issue Queue Validation failed: VX_issue input decode_if_valid was never observed");
+        end
+
+        if (!saw_issue_input_fire) begin
+            $fatal("Issue Queue Validation failed: VX_issue input did not handshake decode_if_valid && decode_if_ready");
+        end
+
+        if (!saw_issue_input_nop_like) begin
+            $fatal("Issue Queue Validation failed: VX_issue accepted an instruction, but it was not NOP-like EX_ALU with wb=0");
+        end
+
+        if (!saw_issue_slice_decode_valid) begin
+            $fatal("Issue Queue Validation failed: selected VX_issue_slice never saw decode_if_valid");
+        end
+
+        if (!saw_issue_slice_decode_fire) begin
+            $fatal("Issue Queue Validation failed: selected VX_issue_slice decode_if_valid && decode_if_ready never fired");
+        end
+
+        if (!saw_issue_ibuffer_valid) begin
+            $fatal("Issue Queue Validation failed: VX_issue_slice ibuffer_if_valid was never observed");
+        end
+
+        if (!saw_issue_ibuffer_fire) begin
+            $fatal("Issue Queue Validation failed: VX_issue_slice ibuffer_if_valid && ibuffer_if_ready never fired");
+        end
+
+        if (!saw_issue_ibuffer_nop_like) begin
+            $fatal("Issue Queue Validation failed: ibuffer fired, but instruction was not NOP-like EX_ALU with wb=0");
+        end
+
+        $fatal("Issue Queue Validation timed out unexpectedly");
     end
 
     //monitor DCR
@@ -405,14 +461,14 @@ module TB_VX_Top;
                     `CORE0_PATH.fetch_if_data.uuid,
                     `CORE0_PATH.fetch_if_ready
                 );
-
-                if (`CORE0_PATH.fetch_if_data.instr == NOP_INSTR) begin
-                    saw_core_fetch_nop <= 1'b1;
-                end
             end
 
             if (`CORE0_PATH.fetch_if_valid && `CORE0_PATH.fetch_if_ready) begin
                 saw_core_fetch_fire <= 1'b1;
+
+                if (`CORE0_PATH.fetch_if_data.instr == NOP_INSTR) begin
+                    saw_core_fetch_nop <= 1'b1;
+                end
             end
 
             // VX_decode input side
@@ -428,14 +484,14 @@ module TB_VX_Top;
                     `CORE0_PATH.decode.fetch_if_data.uuid,
                     `CORE0_PATH.decode.fetch_if_ready
                 );
-
-                if (`CORE0_PATH.decode.fetch_if_data.instr == NOP_INSTR) begin
-                    saw_decode_input_nop <= 1'b1;
-                end
             end
 
             if (`CORE0_PATH.decode.fetch_if_valid && `CORE0_PATH.decode.fetch_if_ready) begin
                 saw_decode_input_fire <= 1'b1;
+
+                if (`CORE0_PATH.decode.fetch_if_data.instr == NOP_INSTR) begin
+                    saw_decode_input_nop <= 1'b1;
+                end
             end
 
             // VX_decode output side
@@ -456,6 +512,131 @@ module TB_VX_Top;
 
             if (`CORE0_PATH.decode_if_valid && `CORE0_PATH.decode_if_ready) begin
                 saw_decode_output_fire <= 1'b1;
+
+                if (`CORE0_PATH.decode_if_data.ex_type == EX_ALU) begin
+                    saw_decode_output_alu <= 1'b1;
+                end
+
+                if (`CORE0_PATH.decode_if_data.wb == 1'b0) begin
+                    saw_decode_output_no_wb <= 1'b1;
+                end
+
+                if ((`CORE0_PATH.decode_if_data.ex_type == EX_ALU)
+                    && (`CORE0_PATH.decode_if_data.wb == 1'b0)) begin
+                    saw_decode_output_nop_like <= 1'b1;
+                end
+
+                $display(
+                    "[DECODE->ISSUE FIRE] time=%0t PC=0x%0h wid=%0d ex_type=0x%0h op_type=0x%0h wb=%0b",
+                    $time,
+                    `CORE0_PATH.decode_if_data.PC,
+                    `CORE0_PATH.decode_if_data.wid,
+                    `CORE0_PATH.decode_if_data.ex_type,
+                    `CORE0_PATH.decode_if_data.op_type,
+                    `CORE0_PATH.decode_if_data.wb
+                );
+            end
+
+            // VX_issue input boundary
+            if (`ISSUE_PATH.decode_if_valid) begin
+                saw_issue_input_valid <= 1'b1;
+
+                $display(
+                    "[ISSUE INPUT VALID] time=%0t PC=0x%0h wid=%0d ex_type=0x%0h op_type=0x%0h wb=%0b ready=%0b",
+                    $time,
+                    `ISSUE_PATH.decode_if_data.PC,
+                    `ISSUE_PATH.decode_if_data.wid,
+                    `ISSUE_PATH.decode_if_data.ex_type,
+                    `ISSUE_PATH.decode_if_data.op_type,
+                    `ISSUE_PATH.decode_if_data.wb,
+                    `ISSUE_PATH.decode_if_ready
+                );
+            end
+
+            if (`ISSUE_PATH.decode_if_valid && `ISSUE_PATH.decode_if_ready) begin
+                saw_issue_input_fire <= 1'b1;
+
+                if ((`ISSUE_PATH.decode_if_data.ex_type == EX_ALU)
+                    && (`ISSUE_PATH.decode_if_data.wb == 1'b0)) begin
+                    saw_issue_input_nop_like <= 1'b1;
+                end
+
+                $display(
+                    "[ISSUE INPUT FIRE] time=%0t PC=0x%0h wid=%0d ex_type=0x%0h op_type=0x%0h wb=%0b",
+                    $time,
+                    `ISSUE_PATH.decode_if_data.PC,
+                    `ISSUE_PATH.decode_if_data.wid,
+                    `ISSUE_PATH.decode_if_data.ex_type,
+                    `ISSUE_PATH.decode_if_data.op_type,
+                    `ISSUE_PATH.decode_if_data.wb
+                );
+            end
+
+            if (`ISSUE_SLICE0_PATH.decode_if_valid) begin
+                saw_issue_slice_decode_valid <= 1'b1;
+
+                $display(
+                    "[ISSUE SLICE DECODE VALID] time=%0t PC=0x%0h wid=%0d ex_type=0x%0h op_type=0x%0h wb=%0b ready=%0b",
+                    $time,
+                    `ISSUE_SLICE0_PATH.decode_if_data.PC,
+                    `ISSUE_SLICE0_PATH.decode_if_data.wid,
+                    `ISSUE_SLICE0_PATH.decode_if_data.ex_type,
+                    `ISSUE_SLICE0_PATH.decode_if_data.op_type,
+                    `ISSUE_SLICE0_PATH.decode_if_data.wb,
+                    `ISSUE_SLICE0_PATH.decode_if_ready
+                );
+            end
+
+            if (`ISSUE_SLICE0_PATH.decode_if_valid && `ISSUE_SLICE0_PATH.decode_if_ready) begin
+                saw_issue_slice_decode_fire <= 1'b1;
+
+                $display(
+                    "[ISSUE SLICE DECODE FIRE] time=%0t PC=0x%0h wid=%0d ex_type=0x%0h op_type=0x%0h wb=%0b",
+                    $time,
+                    `ISSUE_SLICE0_PATH.decode_if_data.PC,
+                    `ISSUE_SLICE0_PATH.decode_if_data.wid,
+                    `ISSUE_SLICE0_PATH.decode_if_data.ex_type,
+                    `ISSUE_SLICE0_PATH.decode_if_data.op_type,
+                    `ISSUE_SLICE0_PATH.decode_if_data.wb
+                );
+            end
+
+            for (int i = 0; i < PER_ISSUE_WARPS; ++i) begin
+                if (`ISSUE_SLICE0_PATH.ibuffer_if_valid[i]) begin
+                    saw_issue_ibuffer_valid <= 1'b1;
+
+                    $display(
+                        "[ISSUE IBUFFER VALID] time=%0t slot=%0d PC=0x%0h ex_type=0x%0h op_type=0x%0h wb=%0b ready=%0b",
+                        $time,
+                        i,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].PC,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].ex_type,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].op_type,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].wb,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_ready[i]
+                    );
+                end
+
+                if (`ISSUE_SLICE0_PATH.ibuffer_if_valid[i]
+                    && `ISSUE_SLICE0_PATH.ibuffer_if_ready[i]) begin
+
+                    saw_issue_ibuffer_fire <= 1'b1;
+
+                    if ((`ISSUE_SLICE0_PATH.ibuffer_if_data[i].ex_type == EX_ALU)
+                        && (`ISSUE_SLICE0_PATH.ibuffer_if_data[i].wb == 1'b0)) begin
+                        saw_issue_ibuffer_nop_like <= 1'b1;
+                    end
+
+                    $display(
+                        "[ISSUE IBUFFER FIRE] time=%0t slot=%0d PC=0x%0h ex_type=0x%0h op_type=0x%0h wb=%0b",
+                        $time,
+                        i,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].PC,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].ex_type,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].op_type,
+                        `ISSUE_SLICE0_PATH.ibuffer_if_data[i].wb
+                    );
+                end
             end
         end
     end
