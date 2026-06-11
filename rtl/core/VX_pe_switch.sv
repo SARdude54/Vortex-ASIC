@@ -12,12 +12,12 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`include "VX_execute_if.vh"
-`include "VX_result_if.vh"
+`include "interfaces/VX_execute_if.vh"
+`include "interfaces/VX_result_if.vh"
 
 module VX_pe_switch import VX_gpu_pkg::*; #(
-    parameter PE_COUNT        = 0,
-    parameter NUM_LANES       = 0,
+    parameter PE_COUNT        = 1,
+    parameter NUM_LANES       = `NUM_THREADS,
     parameter REQ_OUT_BUF     = 0,
     parameter RSP_OUT_BUF     = 0,
     parameter `STRING ARBITER = "R",
