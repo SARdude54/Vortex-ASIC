@@ -185,6 +185,15 @@ module VX_mem_coalescer #(
 
     wire out_req_fire = out_req_valid && out_req_ready;
 
+    // Build outgoing request tag 
+    wire [OUT_TAG_WIDTH-1:0] out_req_tag_w;
+
+    if (UUID_WIDTH != 0) begin : g_out_req_tag_uuid
+        assign out_req_tag_w = { in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
+    end else begin : g_out_req_tag_no_uuid
+        assign out_req_tag_w = ibuf_waddr;
+    end
+
     always @(*) begin
         state_n          = state_r;
         out_req_valid_n  = out_req_valid_r;
@@ -196,30 +205,32 @@ module VX_mem_coalescer #(
         out_req_data_n   = out_req_data_r;
         out_req_tag_n    = out_req_tag_r;
         req_rem_mask_n   = req_rem_mask_r;
-        in_req_ready_n   = 0;
+        in_req_ready_n   = 1'b0;
 
         case (state_r)
         STATE_WAIT: begin
-            // wait for pending outgoing request to submit
             if (out_req_fire) begin
-                out_req_valid_n = 0;
+                out_req_valid_n = 1'b0;
             end
+
             if (in_req_valid && ~out_req_valid_n && ~ibuf_full) begin
                 state_n = STATE_SEND;
             end
         end
-        default/*STATE_SEND*/: begin
-            state_n         = STATE_WAIT;
-            out_req_valid_n = 1;
-            out_req_mask_n  = batch_valid_r;
-            out_req_rw_n    = in_req_rw;
-            out_req_addr_n  = seed_addr_r;
-            out_req_flags_n = seed_flags_r;
-            out_req_byteen_n= req_byteen_merged;
-            out_req_data_n  = req_data_merged;
-            out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
-            req_rem_mask_n  = is_last_batch ? '1 : (req_rem_mask_r & ~current_pmask);
-            in_req_ready_n  = is_last_batch;
+
+        default: begin
+            state_n          = STATE_WAIT;
+            out_req_valid_n  = 1'b1;
+            out_req_mask_n   = batch_valid_r;
+            out_req_rw_n     = in_req_rw;
+            out_req_addr_n   = seed_addr_r;
+            out_req_flags_n  = seed_flags_r;
+            out_req_byteen_n = req_byteen_merged;
+            out_req_data_n   = req_data_merged;
+            out_req_tag_n    = out_req_tag_w;
+
+            req_rem_mask_n   = is_last_batch ? '1 : (req_rem_mask_r & ~current_pmask);
+            in_req_ready_n   = is_last_batch;
         end
         endcase
     end
@@ -320,15 +331,20 @@ module VX_mem_coalescer #(
         end
     end
 
-    assign in_rsp_valid  = out_rsp_valid;
-    assign in_rsp_mask   = in_rsp_mask_n;
-    assign in_rsp_data   = in_rsp_data_n;
-    assign in_rsp_tag    = {out_rsp_tag[OUT_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout_tag};
+    assign in_rsp_valid = out_rsp_valid;
+    assign in_rsp_mask  = in_rsp_mask_n;
+    assign in_rsp_data  = in_rsp_data_n;
+
+    if (UUID_WIDTH != 0) begin : g_in_rsp_tag_uuid
+        assign in_rsp_tag = {out_rsp_tag[OUT_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout_tag};
+    end else begin : g_in_rsp_tag_no_uuid
+        assign in_rsp_tag = ibuf_dout_tag;
+    end
+
     assign out_rsp_ready = in_rsp_ready;
 
-    // compute coalescing misses
-    // misses are partial transfers (not fuly coalesced)
-
+    // Count coalescing misses (partial transfers).
+    
     reg [PERF_CTR_BITS-1:0] misses_r;
 
     wire partial_transfer = (out_req_fire && req_rem_mask_r != '1);
